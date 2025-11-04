@@ -11,6 +11,66 @@ from cached_api_client import CachedBaseAPIClient
 from config import get_api_key
 import json
 
+# CPV Codes Dictionary - Main divisions and common categories
+CPV_CODES = {
+    # Main Divisions (2-digit)
+    "03000000": "03 - Agricultural, farming, fishing, forestry products",
+    "09000000": "09 - Petroleum products, fuel, electricity",
+    "14000000": "14 - Mining, basic metals and related products",
+    "15000000": "15 - Food, beverages, tobacco",
+    "16000000": "16 - Agricultural machinery",
+    "18000000": "18 - Clothing, footwear, luggage articles",
+    "19000000": "19 - Leather and textile fabrics, plastic and rubber materials",
+    "22000000": "22 - Printed matter and related products",
+    "24000000": "24 - Chemical products",
+    "30000000": "30 - Office and computing machinery, equipment and supplies",
+    "31000000": "31 - Electrical machinery, apparatus, equipment and consumables",
+    "32000000": "32 - Radio, television, communication equipment",
+    "33000000": "33 - Medical equipments, pharmaceuticals and personal care products",
+    "34000000": "34 - Transport equipment and auxiliary products",
+    "35000000": "35 - Security, fire-fighting, police and defence equipment",
+    "37000000": "37 - Musical instruments, sport goods, games, toys",
+    "38000000": "38 - Laboratory, optical and precision equipments",
+    "39000000": "39 - Furniture, furnishings, domestic appliances",
+    "41000000": "41 - Collected and purified water",
+    "42000000": "42 - Industrial machinery",
+    "43000000": "43 - Mining, quarrying and construction equipment",
+    "44000000": "44 - Construction structures and materials",
+    "45000000": "45 - Construction work",
+    "48000000": "48 - Software package and information systems",
+    "50000000": "50 - Repair and maintenance services",
+    "51000000": "51 - Installation services",
+    "55000000": "55 - Hotel, restaurant and retail trade services",
+    "60000000": "60 - Transport services",
+    "63000000": "63 - Supporting and auxiliary transport services",
+    "64000000": "64 - Postal and telecommunications services",
+    "65000000": "65 - Public utilities",
+    "66000000": "66 - Financial and insurance services",
+    "70000000": "70 - Real estate services",
+    "71000000": "71 - Architectural, construction, engineering and inspection services",
+    "72000000": "72 - IT services: consulting, software development",
+    "73000000": "73 - Research and development services",
+    "75000000": "75 - Administration, defence and social security services",
+    "76000000": "76 - Services related to the oil and gas industry",
+    "77000000": "77 - Agricultural, forestry, horticultural, aquacultural services",
+    "79000000": "79 - Business services: law, marketing, consulting",
+    "80000000": "80 - Education and training services",
+    "85000000": "85 - Health and social work services",
+    "90000000": "90 - Sewage, refuse, cleaning and environmental services",
+    "92000000": "92 - Recreational, cultural and sporting services",
+    "98000000": "98 - Other community, social and personal services",
+}
+
+def get_cpv_display_options():
+    """Get CPV codes formatted for display in multiselect."""
+    return [f"{code} - {desc.split(' - ', 1)[1]}" for code, desc in sorted(CPV_CODES.items())]
+
+def extract_cpv_codes_from_selection(selected_options):
+    """Extract CPV codes from selected display options."""
+    if not selected_options:
+        return []
+    return [option.split(' - ')[0] for option in selected_options]
+
 
 # Page configuration
 st.set_page_config(
@@ -96,12 +156,15 @@ def filter_contracts(contracts, filters):
             if any(location in loc.lower() for loc in c.get('localExecucao', []))
         ]
     
-    # CPV code filter
-    if filters.get('cpv_code'):
-        cpv = filters['cpv_code'].strip()
+    # CPV codes filter (multiple selection)
+    if filters.get('cpv_codes'):
+        cpv_list = filters['cpv_codes']
         filtered = [
             c for c in filtered
-            if any(cpv in cpv_item for cpv_item in c.get('cpv', []))
+            if any(
+                any(cpv_filter in cpv_item for cpv_filter in cpv_list)
+                for cpv_item in c.get('cpv', [])
+            )
         ]
     
     return filtered
@@ -223,11 +286,16 @@ def main():
     )
     
     # CPV filter
-    st.sidebar.subheader("CPV Code")
-    cpv_code = st.sidebar.text_input(
-        "CPV Code:",
-        help="Filter by CPV code (e.g., '45000000' for construction works)"
+    st.sidebar.subheader("CPV Classification")
+    cpv_options = get_cpv_display_options()
+    selected_cpvs = st.sidebar.multiselect(
+        "Select CPV Categories:",
+        options=cpv_options,
+        default=None,
+        help="Select one or more CPV categories. Use the search to find specific categories.",
+        placeholder="Search and select CPV codes..."
     )
+    cpv_codes = extract_cpv_codes_from_selection(selected_cpvs)
     
     st.sidebar.markdown("---")
     
@@ -266,7 +334,7 @@ def main():
                 'min_price': min_price,
                 'max_price': max_price,
                 'location': location,
-                'cpv_code': cpv_code
+                'cpv_codes': cpv_codes
             }
             
             filtered = filter_contracts(contracts, filters)
