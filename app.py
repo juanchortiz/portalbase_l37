@@ -228,12 +228,10 @@ def contracts_to_dataframe(contracts):
 
 
 def main():
-    # Hero section with rocket image
+    # Hero section with gradient background
     st.markdown("""
     <div style="
-        background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('https://i.imgur.com/xMjK8tn.jpeg');
-        background-size: cover;
-        background-position: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
         height: 200px;
         width: 100%;
         border-radius: 10px;
@@ -242,11 +240,12 @@ def main():
         justify-content: space-between;
         padding: 0 40px;
         margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     ">
         <div style="color: white;">
-            <h1 style="margin: 0; font-size: 2.5em; color: white;">🚨 Portal Base</h1>
-            <p style="margin: 5px 0 0 0; font-size: 1.2em; color: white;">Concursos e Contratos Públicos</p>
-            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #ffcccc;">Powered by Link37</p>
+            <h1 style="margin: 0; font-size: 2.5em; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🚨 Portal Base</h1>
+            <p style="margin: 5px 0 0 0; font-size: 1.2em; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">Concursos e Contratos Públicos</p>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #ffffff;">Powered by Link37</p>
         </div>
         <div style="text-align: right;">
             <span style="font-size: 60px; font-weight: bold; color: #FFFFFF; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">link</span><span style="font-size: 60px; font-weight: bold; color: #E31E26; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">37</span>
