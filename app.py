@@ -96,6 +96,14 @@ def filter_contracts(contracts, filters):
             if any(location in loc.lower() for loc in c.get('localExecucao', []))
         ]
     
+    # CPV code filter
+    if filters.get('cpv_code'):
+        cpv = filters['cpv_code'].strip()
+        filtered = [
+            c for c in filtered
+            if any(cpv in cpv_item for cpv_item in c.get('cpv', []))
+        ]
+    
     return filtered
 
 
@@ -112,6 +120,7 @@ def contracts_to_dataframe(contracts):
             'Object': contract.get('objectoContrato', 'N/A'),
             'Type': ', '.join(contract.get('tipoContrato', ['N/A'])),
             'Price (€)': format_price(contract.get('precoContratual', '0')),
+            'CPV Codes': ', '.join(contract.get('cpv', ['N/A'])[:3]),  # Show first 3 CPV codes
             'Contracting Entity': ', '.join(contract.get('adjudicante', ['N/A'])),
             'Contractors': ', '.join(contract.get('adjudicatarios', ['N/A'])),
             'Location': ', '.join(contract.get('localExecucao', ['N/A'])),
@@ -123,14 +132,14 @@ def contracts_to_dataframe(contracts):
 
 def main():
     # Header
-    st.title("📋 Portal Base - Public Procurement Browser")
-    st.markdown("Browse and filter Portuguese public procurement data")
+    st.title("📋 Portal Base - Concursos e Contratos Públicos - Link37 App")
+    st.markdown("Filtrar e buscar. Ver infromação de caché")
     
     # Sidebar - Filters
-    st.sidebar.header("🔍 Filters")
+    st.sidebar.header("🔍 Filtros")
     
     # Date range selection
-    st.sidebar.subheader("Date Range")
+    st.sidebar.subheader("Datas")
     date_option = st.sidebar.radio(
         "Select period:",
         ["Today", "Yesterday", "Last 7 days", "Last 30 days", "Custom range"]
@@ -213,6 +222,13 @@ def main():
         help="Filter by execution location (e.g., 'Lisboa', 'Porto')"
     )
     
+    # CPV filter
+    st.sidebar.subheader("CPV Code")
+    cpv_code = st.sidebar.text_input(
+        "CPV Code:",
+        help="Filter by CPV code (e.g., '45000000' for construction works)"
+    )
+    
     st.sidebar.markdown("---")
     
     # Search button
@@ -249,7 +265,8 @@ def main():
                 'contract_type': contract_type,
                 'min_price': min_price,
                 'max_price': max_price,
-                'location': location
+                'location': location,
+                'cpv_code': cpv_code
             }
             
             filtered = filter_contracts(contracts, filters)
@@ -380,37 +397,75 @@ def main():
             st.write(f"Showing contracts {start_idx + 1} to {end_idx} of {len(contracts)}")
             
             for i, contract in enumerate(contracts[start_idx:end_idx], start=start_idx + 1):
-                with st.expander(f"**{i}. {contract.get('objectoContrato', 'N/A')}**"):
+                with st.expander(f"**{i}. {contract.get('objectoContrato', 'N/A')}** - €{format_price(contract.get('precoContratual', '0')):,.2f}"):
+                    # Basic Information Table
+                    st.markdown("**📋 Basic Information**")
+                    basic_info = pd.DataFrame({
+                        'Field': ['Contract ID', 'Publication Date', 'Celebration Date', 'Contract Price', 'Announcement ID'],
+                        'Value': [
+                            contract.get('idContrato', 'N/A'),
+                            contract.get('dataPublicacao', 'N/A'),
+                            contract.get('dataCelebracaoContrato', 'N/A'),
+                            f"€{format_price(contract.get('precoContratual', '0')):,.2f}",
+                            contract.get('nAnuncio', 'N/A')
+                        ]
+                    })
+                    st.dataframe(basic_info, hide_index=True, use_container_width=True)
+                    
+                    # Contract Type and Procedure Table
+                    st.markdown("**📝 Type & Procedure**")
+                    type_info = pd.DataFrame({
+                        'Field': ['Contract Type', 'Procedure Type', 'Framework Agreement'],
+                        'Value': [
+                            ', '.join(contract.get('tipoContrato', ['N/A'])),
+                            contract.get('tipoprocedimento', 'N/A'),
+                            contract.get('acordoQuadro', 'N/A')
+                        ]
+                    })
+                    st.dataframe(type_info, hide_index=True, use_container_width=True)
+                    
+                    # Entities Table
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.write(f"**Contract ID:** {contract.get('idContrato', 'N/A')}")
-                        st.write(f"**Publication Date:** {contract.get('dataPublicacao', 'N/A')}")
-                        st.write(f"**Celebration Date:** {contract.get('dataCelebracaoContrato', 'N/A')}")
-                        st.write(f"**Price:** €{format_price(contract.get('precoContratual', '0')):,.2f}")
-                        st.write(f"**Type:** {', '.join(contract.get('tipoContrato', ['N/A']))}")
-                        st.write(f"**Procedure Type:** {contract.get('tipoprocedimento', 'N/A')}")
+                        st.markdown("**🏢 Contracting Entities**")
+                        entities_df = pd.DataFrame({
+                            'Entity': contract.get('adjudicante', ['N/A'])
+                        })
+                        st.dataframe(entities_df, hide_index=True, use_container_width=True)
                     
                     with col2:
-                        st.write(f"**Contracting Entity:**")
-                        for entity in contract.get('adjudicante', ['N/A']):
-                            st.write(f"  • {entity}")
-                        
-                        st.write(f"**Contractors:**")
-                        for contractor in contract.get('adjudicatarios', ['N/A']):
-                            st.write(f"  • {contractor}")
+                        st.markdown("**👔 Contractors**")
+                        contractors_df = pd.DataFrame({
+                            'Contractor': contract.get('adjudicatarios', ['N/A'])
+                        })
+                        st.dataframe(contractors_df, hide_index=True, use_container_width=True)
                     
-                    if contract.get('descContrato'):
-                        st.write(f"**Description:** {contract.get('descContrato')}")
-                    
-                    if contract.get('localExecucao'):
-                        st.write(f"**Execution Location:** {', '.join(contract.get('localExecucao', []))}")
-                    
+                    # CPV Codes Table
                     if contract.get('cpv'):
-                        st.write(f"**CPV Codes:** {', '.join(contract.get('cpv', []))}")
+                        st.markdown("**🏷️ CPV Codes (Classification)**")
+                        cpv_df = pd.DataFrame({
+                            'CPV Code': contract.get('cpv', [])
+                        })
+                        st.dataframe(cpv_df, hide_index=True, use_container_width=True)
                     
-                    if contract.get('nAnuncio'):
-                        st.write(f"**Announcement:** {contract.get('nAnuncio')}")
+                    # Location Information
+                    if contract.get('localExecucao'):
+                        st.markdown("**📍 Execution Locations**")
+                        location_df = pd.DataFrame({
+                            'Location': contract.get('localExecucao', [])
+                        })
+                        st.dataframe(location_df, hide_index=True, use_container_width=True)
+                    
+                    # Description
+                    if contract.get('descContrato'):
+                        st.markdown("**📄 Description**")
+                        st.info(contract.get('descContrato'))
+                    
+                    # Object (always present)
+                    if contract.get('objectoContrato'):
+                        st.markdown("**🎯 Contract Object**")
+                        st.success(contract.get('objectoContrato'))
     
     else:
         # Welcome message
