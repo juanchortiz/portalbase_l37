@@ -175,8 +175,8 @@ def filter_contracts(contracts, filters):
         location_list = filters['location'] if isinstance(filters['location'], list) else [filters['location']]
         filtered = [
             c for c in filtered
-            if any(
-                any(filter_loc.lower() in loc.lower() for filter_loc in location_list)
+            if c.get('localExecucao') and isinstance(c.get('localExecucao'), list) and any(
+                any(filter_loc.lower() in str(loc).lower() for filter_loc in location_list)
                 for loc in c.get('localExecucao', [])
             )
         ]
