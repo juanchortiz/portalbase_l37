@@ -133,6 +133,9 @@ if 'filtered_contracts' not in st.session_state:
 if 'filtered_announcements' not in st.session_state:
     st.session_state.filtered_announcements = []
 
+if 'search_performed' not in st.session_state:
+    st.session_state.search_performed = False
+
 
 def format_price(price_str):
     """Convert Portuguese price format to float."""
@@ -447,6 +450,7 @@ def main():
     
     # Main content area
     if search_button:
+        st.session_state.search_performed = True  # Mark that a search has been performed
         with st.spinner('Searching contracts...'):
             # Convert dates to Portuguese format
             start_str = start_date.strftime("%d/%m/%Y")
@@ -804,55 +808,60 @@ def main():
                         st.success(contract.get('objectoContrato'))
     
     else:
-        # Welcome message
-        st.info("👈 Use the filters in the sidebar to search for contracts")
-        
-        # Quick stats
-        stats = st.session_state.client.get_cache_stats()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Contracts in Cache", f"{stats['total_contracts']:,}")
-        with col2:
-            st.metric("Total Announcements in Cache", f"{stats['total_announcements']:,}")
-        
-        # Show recent contracts sample
-        st.markdown("### 📋 Recent Contracts Sample")
-        st.markdown("*Showing a preview of recent contracts. Use filters to search for specific contracts.*")
-        
-        try:
-            # Get yesterday's contracts as a sample
-            yesterday = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
-            sample_contracts = st.session_state.client.get_contracts_by_date(yesterday)
+        # Only show sample table if no search has been performed yet
+        if not st.session_state.search_performed:
+            # Welcome message
+            st.info("👈 Use the filters in the sidebar to search for contracts")
             
-            if sample_contracts:
-                # Limit to first 20 for preview
-                sample_contracts = sample_contracts[:20]
+            # Quick stats
+            stats = st.session_state.client.get_cache_stats()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total Contracts in Cache", f"{stats['total_contracts']:,}")
+            with col2:
+                st.metric("Total Announcements in Cache", f"{stats['total_announcements']:,}")
+            
+            # Show recent contracts sample
+            st.markdown("### 📋 Recent Contracts Sample")
+            st.markdown("*Showing a preview of recent contracts. Use filters to search for specific contracts.*")
+            
+            try:
+                # Get yesterday's contracts as a sample
+                yesterday = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
+                sample_contracts = st.session_state.client.get_contracts_by_date(yesterday)
                 
-                # Show in table format
-                df = contracts_to_dataframe(sample_contracts)
-                st.dataframe(
-                    df,
-                    use_container_width=True,
-                    height=400,
-                    column_config={
-                        "View Contract": st.column_config.LinkColumn(
-                            "🔗 Contract",
-                            display_text="View"
-                        ),
-                        "Price (€)": st.column_config.NumberColumn(
-                            "Price (€)",
-                            format="€%.2f"
-                        )
-                    },
-                    hide_index=True
-                )
-                
-                st.info(f"📊 Showing {len(sample_contracts)} contracts from {yesterday}. Click 🔎 Search to see more or filter.")
-            else:
-                st.warning("No recent contracts found. Use the search filters to load data.")
-        except Exception as e:
-            st.warning(f"Unable to load sample data. Use the filters to search for contracts.")
+                if sample_contracts:
+                    # Limit to first 20 for preview
+                    sample_contracts = sample_contracts[:20]
+                    
+                    # Show in table format
+                    df = contracts_to_dataframe(sample_contracts)
+                    st.dataframe(
+                        df,
+                        use_container_width=True,
+                        height=400,
+                        column_config={
+                            "View Contract": st.column_config.LinkColumn(
+                                "🔗 Contract",
+                                display_text="View"
+                            ),
+                            "Price (€)": st.column_config.NumberColumn(
+                                "Price (€)",
+                                format="€%.2f"
+                            )
+                        },
+                        hide_index=True
+                    )
+                    
+                    st.info(f"📊 Showing {len(sample_contracts)} contracts from {yesterday}. Click 🔎 Search to see more or filter.")
+                else:
+                    st.warning("No recent contracts found. Use the search filters to load data.")
+            except Exception as e:
+                st.warning(f"Unable to load sample data. Use the filters to search for contracts.")
+        else:
+            # Search was performed but returned no results
+            st.warning("⚠️ No contracts found matching your filters. Try adjusting them.")
 
 
 if __name__ == "__main__":
