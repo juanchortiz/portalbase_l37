@@ -251,19 +251,35 @@ def main():
     )
     
     if date_option == "Custom range":
-        col1, col2 = st.sidebar.columns(2)
+        st.sidebar.markdown("**Data Inicial**")
+        start_date = st.sidebar.date_input(
+            "Escolher data inicial:",
+            value=datetime.now() - timedelta(days=30),
+            max_value=datetime.now(),
+            format="DD/MM/YYYY",
+            label_visibility="collapsed"
+        )
+        
+        st.sidebar.markdown("**Data Final**")
+        col1, col2 = st.sidebar.columns([3, 1])
         with col1:
-            start_date = st.date_input(
-                "Start date",
-                value=datetime.now() - timedelta(days=30),
-                max_value=datetime.now()
+            end_date = st.date_input(
+                "Escolher data final:",
+                value=datetime.now() - timedelta(days=1),
+                max_value=datetime.now(),
+                format="DD/MM/YYYY",
+                label_visibility="collapsed"
             )
         with col2:
-            end_date = st.date_input(
-                "End date",
-                value=datetime.now() - timedelta(days=1),  # Default to yesterday
-                max_value=datetime.now()
-            )
+            if st.button("Hoje", use_container_width=True):
+                end_date = datetime.now().date()
+                st.rerun()
+        
+        # Validate date range
+        if start_date > end_date:
+            st.sidebar.error("⚠️ Data inicial não pode ser posterior à data final!")
+            # Reset to valid range
+            start_date = end_date
     else:
         if date_option == "Today":
             start_date = end_date = datetime.now().date()
