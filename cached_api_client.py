@@ -298,17 +298,32 @@ class CachedBaseAPIClient:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Convert dates for comparison
-        cursor.execute("""
-            SELECT raw_data FROM contracts 
-            WHERE data_publicacao >= ? AND data_publicacao <= ?
-            ORDER BY data_publicacao DESC
-        """, (start_date, end_date))
+        # Convert DD/MM/YYYY to comparable format YYYY-MM-DD for proper date comparison
+        def convert_date(date_str):
+            """Convert DD/MM/YYYY to YYYY-MM-DD"""
+            parts = date_str.split('/')
+            return f"{parts[2]}-{parts[1]}-{parts[0]}"
         
-        results = cursor.fetchall()
+        start_comparable = convert_date(start_date)
+        end_comparable = convert_date(end_date)
+        
+        # Get all contracts and filter by date
+        cursor.execute("""
+            SELECT raw_data, data_publicacao FROM contracts 
+            WHERE data_publicacao LIKE ?
+        """, (f"%/{start_year}",))
+        
+        results = []
+        for row in cursor.fetchall():
+            date_pub = row[1]
+            if date_pub:
+                comparable_date = convert_date(date_pub)
+                if start_comparable <= comparable_date <= end_comparable:
+                    results.append(row[0])
+        
         conn.close()
         
-        return [json.loads(row[0]) for row in results]
+        return [json.loads(data) for data in results]
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the cached data."""
