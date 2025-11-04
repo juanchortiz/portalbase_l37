@@ -147,23 +147,31 @@ def filter_contracts(contracts, filters):
 
 
 def contracts_to_dataframe(contracts):
-    """Convert contracts to a pandas DataFrame."""
+    """Convert contracts to a pandas DataFrame with clickable links."""
     if not contracts:
         return pd.DataFrame()
     
     data = []
     for contract in contracts:
+        contract_id = contract.get('idContrato', 'N/A')
+        announcement_id = contract.get('nAnuncio', 'N/A')
+        
+        # Create Base.gov.pt links
+        contract_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=contratos&id={contract_id}" if contract_id != 'N/A' else ''
+        announcement_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=anuncios&id={announcement_id}" if announcement_id != 'N/A' else ''
+        
         data.append({
-            'ID': contract.get('idContrato', 'N/A'),
+            'View Contract': contract_url,  # New column with link
+            'View Announcement': announcement_url,  # New column with link
+            'ID': contract_id,
             'Publication Date': contract.get('dataPublicacao', 'N/A'),
             'Object': contract.get('objectoContrato', 'N/A'),
             'Type': ', '.join(contract.get('tipoContrato', ['N/A'])),
             'Price (€)': format_price(contract.get('precoContratual', '0')),
-            'CPV Codes': ', '.join(contract.get('cpv', ['N/A'])[:3]),  # Show first 3 CPV codes
+            'CPV Codes': ', '.join(contract.get('cpv', ['N/A'])[:3]),
             'Contracting Entity': ', '.join(contract.get('adjudicante', ['N/A'])),
             'Contractors': ', '.join(contract.get('adjudicatarios', ['N/A'])),
             'Location': ', '.join(contract.get('localExecucao', ['N/A'])),
-            'Announcement': contract.get('nAnuncio', 'N/A')
         })
     
     return pd.DataFrame(data)
@@ -318,17 +326,28 @@ def main():
             # Convert to DataFrame
             df = contracts_to_dataframe(contracts)
             
-            # Display table
+            # Display table with clickable links
             st.dataframe(
                 df,
                 use_container_width=True,
                 height=600,
                 column_config={
+                    "View Contract": st.column_config.LinkColumn(
+                        "🔗 Contract",
+                        help="Click to view full contract on Base.gov.pt",
+                        display_text="View"
+                    ),
+                    "View Announcement": st.column_config.LinkColumn(
+                        "📢 Announcement", 
+                        help="Click to view announcement on Base.gov.pt",
+                        display_text="View"
+                    ),
                     "Price (€)": st.column_config.NumberColumn(
                         "Price (€)",
                         format="€%.2f"
                     )
-                }
+                },
+                hide_index=True
             )
             
             # Download button
@@ -513,11 +532,20 @@ def main():
                     use_container_width=True,
                     height=400,
                     column_config={
+                        "View Contract": st.column_config.LinkColumn(
+                            "🔗 Contract",
+                            display_text="View"
+                        ),
+                        "View Announcement": st.column_config.LinkColumn(
+                            "📢 Announcement",
+                            display_text="View"
+                        ),
                         "Price (€)": st.column_config.NumberColumn(
                             "Price (€)",
                             format="€%.2f"
                         )
-                    }
+                    },
+                    hide_index=True
                 )
                 
                 st.info(f"📊 Showing {len(sample_contracts)} contracts from {yesterday}. Click 🔎 Search to see more or filter.")
