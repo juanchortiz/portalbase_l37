@@ -250,4 +250,3 @@ For issues, questions, or contributions:
 ---
 
 **Made with ❤️ for transparency in public procurement**
-
