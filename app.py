@@ -334,6 +334,9 @@ def main():
             else:
                 contracts = st.session_state.client.get_contracts_by_date_range(start_str, end_str)
             
+            # Debug: Show initial results
+            st.info(f"📊 Found {len(contracts)} contracts in date range")
+            
             # Apply filters
             filters = {
                 'keyword': keyword,
@@ -342,8 +345,24 @@ def main():
                 'cpv_codes': cpv_codes
             }
             
+            # Debug: Show active filters
+            active_filters = []
+            if keyword: active_filters.append(f"Keywords: {keyword}")
+            if entity_nif: active_filters.append(f"NIF: {entity_nif}")
+            if location: active_filters.append(f"Locations: {len(location)}")
+            if cpv_codes: active_filters.append(f"CPV Codes: {len(cpv_codes)}")
+            
+            if active_filters:
+                st.info(f"🔍 Active filters: {', '.join(active_filters)}")
+            
             filtered = filter_contracts(contracts, filters)
             st.session_state.filtered_contracts = filtered
+            
+            # Debug: Show filtered results
+            if filtered:
+                st.success(f"✅ {len(filtered)} contracts match your filters")
+            else:
+                st.warning(f"⚠️ No contracts found matching your filters. Try adjusting them.")
     
     # Display results
     if st.session_state.filtered_contracts:
