@@ -2,6 +2,9 @@
 .env
 Secrets
 
+# Scripts with API tokens
+create_hubspot_deals.py
+
 # Database files
 *.db
 *.db-journal
