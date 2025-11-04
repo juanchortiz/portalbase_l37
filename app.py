@@ -228,24 +228,30 @@ def contracts_to_dataframe(contracts):
 
 
 def main():
-    # Header with logos
-    col1, col2, col3 = st.columns([1, 3, 1])
+    # Header with ESN pattern banner and Link37 logo
+    st.markdown("""
+    <div style="
+        background-image: url('https://i.imgur.com/8YqXZ4r.png');
+        background-repeat: repeat-x;
+        background-size: auto 80px;
+        background-position: left center;
+        height: 80px;
+        width: 100%;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    "></div>
+    """, unsafe_allow_html=True)
+    
+    # Title and Link37 logo
+    col1, col2 = st.columns([4, 1])
     
     with col1:
-        st.markdown("""
-        <a href="https://esn.org" target="_blank">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/ESN_logo.svg/1200px-ESN_logo.svg.png" 
-                 width="100" style="margin-top: 20px;">
-        </a>
-        """, unsafe_allow_html=True)
-    
-    with col2:
         st.title("🚨 Portal Base - Concursos e Contratos Públicos")
         st.caption("Powered by Link37")
     
-    with col3:
+    with col2:
         st.markdown("""
-        <div style="text-align: right; margin-top: 20px;">
+        <div style="text-align: right; margin-top: 10px;">
             <span style="font-size: 50px; font-weight: bold; color: #E31E26;">link</span><span style="font-size: 50px; font-weight: bold; color: #E31E26;">37</span>
         </div>
         """, unsafe_allow_html=True)
