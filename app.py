@@ -66,6 +66,49 @@ def extract_cpv_codes_from_selection(selected_options):
         return []
     return [option.split(' - ')[0] for option in selected_options]
 
+# Common locations in Portugal (from database analysis)
+COMMON_LOCATIONS = [
+    "All",
+    "Portugal",
+    "Portugal, Lisboa, Lisboa",
+    "Portugal, Porto, Porto",
+    "Portugal, Braga, Braga",
+    "Portugal, Coimbra, Coimbra",
+    "Portugal, Região Autónoma da Madeira, Funchal",
+    "Portugal, Viseu, Viseu",
+    "Portugal, Porto, Vila Nova de Gaia",
+    "Portugal, Porto, Matosinhos",
+    "Portugal, Braga, Barcelos",
+    "Portugal, Braga, Guimarães",
+    "Portugal, Braga, Vila Nova de Famalicão",
+    "Portugal, Évora, Évora",
+    "Portugal, Beja, Beja",
+    "Portugal, Leiria, Leiria",
+    "Portugal, Leiria, Caldas da Rainha",
+    "Portugal, Lisboa, Sintra",
+    "Portugal, Lisboa, Cascais",
+    "Portugal, Lisboa, Loures",
+    "Portugal, Lisboa, Oeiras",
+    "Portugal, Lisboa, Odivelas",
+    "Portugal, Setúbal, Setúbal",
+    "Portugal, Setúbal, Almada",
+    "Portugal, Setúbal, Seixal",
+    "Portugal, Porto, Felgueiras",
+    "Portugal, Porto, Paredes",
+    "Portugal, Porto, Paços de Ferreira",
+    "Portugal, Coimbra, Figueira da Foz",
+    "Portugal, Coimbra, Arganil",
+    "Portugal, Coimbra, Miranda do Corvo",
+    "Portugal, Aveiro, Santa Maria da Feira",
+    "Portugal, Viana do Castelo, Viana do Castelo",
+    "Portugal, Santarém, Ourém",
+    "Portugal, Castelo Branco, Castelo Branco",
+    "Portugal, Castelo Branco, Covilhã",
+    "Portugal, Vila Real, Vila Real",
+    "Portugal, Região Autónoma dos Açores, Ponta Delgada",
+    "Portugal, Região Autónoma dos Açores, Angra do Heroismo",
+]
+
 
 # Page configuration
 st.set_page_config(
@@ -105,14 +148,17 @@ def filter_contracts(contracts, filters):
     """Apply filters to contracts."""
     filtered = contracts
     
-    # Keyword filter
+    # Keyword filter (supports comma-separated keywords)
     if filters['keyword']:
-        keyword = filters['keyword'].lower()
+        keywords = [kw.strip().lower() for kw in filters['keyword'].split(',') if kw.strip()]
         filtered = [
             c for c in filtered
-            if keyword in c.get('objectoContrato', '').lower() or
-               keyword in c.get('descContrato', '').lower() or
-               keyword in ' '.join(c.get('cpv', [])).lower()
+            if any(
+                keyword in c.get('objectoContrato', '').lower() or
+                keyword in c.get('descContrato', '').lower() or
+                keyword in ' '.join(c.get('cpv', [])).lower()
+                for keyword in keywords
+            )
         ]
     
     # Entity NIF filter
@@ -223,8 +269,8 @@ def main():
     # Keyword filter
     st.sidebar.subheader("Keyword Search")
     keyword = st.sidebar.text_input(
-        "Search in object/description:",
-        help="Search for keywords in contract object, description, or CPV codes"
+        "Search keywords (comma-separated):",
+        help="Enter keywords separated by commas. Example: 'reagentes, laboratório, análises'"
     )
     
     # Entity filter
@@ -236,10 +282,14 @@ def main():
     
     # Location filter
     st.sidebar.subheader("Location")
-    location = st.sidebar.text_input(
-        "Location:",
-        help="Filter by execution location (e.g., 'Lisboa', 'Porto')"
+    location = st.sidebar.selectbox(
+        "Select Location:",
+        options=COMMON_LOCATIONS,
+        help="Filter by execution location"
     )
+    # Convert "All" to empty string for filtering
+    if location == "All":
+        location = ""
     
     # CPV filter
     st.sidebar.subheader("CPV Classification")
