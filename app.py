@@ -381,7 +381,7 @@ def main():
     )
     
     # Fornecedor (Supplier) filter
-    st.sidebar.subheader("Fornecedor Filter")
+    st.sidebar.subheader("Fornecedores (adjudicatarios) ")
     fornecedor_nif = st.sidebar.text_input(
         "NIF do Fornecedor:",
         help="Filter by supplier/contractor NIF"
