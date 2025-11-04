@@ -480,6 +480,39 @@ def main():
         with col2:
             st.metric("Total Announcements in Cache", f"{stats['total_announcements']:,}")
         
+        # Show recent contracts sample
+        st.markdown("### 📋 Recent Contracts Sample")
+        st.markdown("*Showing a preview of recent contracts. Use filters to search for specific contracts.*")
+        
+        try:
+            # Get yesterday's contracts as a sample
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
+            sample_contracts = st.session_state.client.get_contracts_by_date(yesterday)
+            
+            if sample_contracts:
+                # Limit to first 20 for preview
+                sample_contracts = sample_contracts[:20]
+                
+                # Show in table format
+                df = contracts_to_dataframe(sample_contracts)
+                st.dataframe(
+                    df,
+                    use_container_width=True,
+                    height=400,
+                    column_config={
+                        "Price (€)": st.column_config.NumberColumn(
+                            "Price (€)",
+                            format="€%.2f"
+                        )
+                    }
+                )
+                
+                st.info(f"📊 Showing {len(sample_contracts)} contracts from {yesterday}. Click 🔎 Search to see more or filter.")
+            else:
+                st.warning("No recent contracts found. Use the search filters to load data.")
+        except Exception as e:
+            st.warning(f"Unable to load sample data. Use the filters to search for contracts.")
+        
         # Example searches
         st.markdown("### 💡 Example Searches")
         
