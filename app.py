@@ -170,21 +170,24 @@ def filter_contracts(contracts, filters):
                nif in ' '.join(c.get('adjudicatarios', []))
         ]
     
-    # Location filter
-    if filters['location']:
-        location = filters['location'].lower()
+    # Location filter (multiple selection)
+    if filters.get('location') and filters['location']:
+        location_list = filters['location'] if isinstance(filters['location'], list) else [filters['location']]
         filtered = [
             c for c in filtered
-            if any(location in loc.lower() for loc in c.get('localExecucao', []))
+            if any(
+                any(filter_loc.lower() in loc.lower() for filter_loc in location_list)
+                for loc in c.get('localExecucao', [])
+            )
         ]
     
     # CPV codes filter (multiple selection)
-    if filters.get('cpv_codes'):
+    if filters.get('cpv_codes') and filters['cpv_codes']:
         cpv_list = filters['cpv_codes']
         filtered = [
             c for c in filtered
             if any(
-                any(cpv_filter in cpv_item for cpv_filter in cpv_list)
+                any(cpv_filter in str(cpv_item) for cpv_filter in cpv_list)
                 for cpv_item in c.get('cpv', [])
             )
         ]
@@ -282,14 +285,13 @@ def main():
     
     # Location filter
     st.sidebar.subheader("Location")
-    location = st.sidebar.selectbox(
-        "Select Location:",
-        options=COMMON_LOCATIONS,
-        help="Filter by execution location"
+    selected_locations = st.sidebar.multiselect(
+        "Select Locations:",
+        options=[loc for loc in COMMON_LOCATIONS if loc != "All"],
+        help="Filter by execution location (select multiple)"
     )
-    # Convert "All" to empty string for filtering
-    if location == "All":
-        location = ""
+    # Convert list to filter format
+    location = selected_locations if selected_locations else []
     
     # CPV filter
     st.sidebar.subheader("CPV Classification")
