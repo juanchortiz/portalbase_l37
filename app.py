@@ -157,10 +157,10 @@ def filter_contracts(contracts, filters):
                 # Contract fields
                 keyword in c.get('objectoContrato', '').lower() or
                 keyword in c.get('descContrato', '').lower() or
-                keyword in ' '.join(c.get('cpv', [])).lower() or
+                keyword in ' '.join(str(x) for x in (c.get('cpv', []) if isinstance(c.get('cpv'), list) else [])).lower() or
                 # Announcement fields
                 keyword in c.get('descricaoAnuncio', '').lower() or
-                keyword in ' '.join(c.get('CPVs', [])).lower()
+                keyword in ' '.join(str(x) for x in (c.get('CPVs', []) if isinstance(c.get('CPVs'), list) else [])).lower()
                 for keyword in keywords
             )
         ]
@@ -170,7 +170,7 @@ def filter_contracts(contracts, filters):
         nif = filters['fornecedor_nif'].strip()
         filtered = [
             c for c in filtered
-            if nif in ' '.join(c.get('adjudicatarios', []))  # Contract suppliers only
+            if nif in ' '.join(str(x) for x in (c.get('adjudicatarios', []) if isinstance(c.get('adjudicatarios'), list) else []))  # Contract suppliers only
         ]
     
     # Location filter (multiple selection) - only applies to contracts, not announcements
@@ -225,17 +225,33 @@ def contracts_to_dataframe(contracts):
         contract_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=contratos&id={contract_id}" if contract_id != 'N/A' else ''
         announcement_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=anuncios&id={announcement_id}" if announcement_id != 'N/A' else ''
         
+        # Safely handle list fields that might contain non-strings
+        tipo_contrato = contract.get('tipoContrato', ['N/A'])
+        tipo_contrato = tipo_contrato if isinstance(tipo_contrato, list) else [str(tipo_contrato)]
+        
+        cpv = contract.get('cpv', ['N/A'])
+        cpv = cpv if isinstance(cpv, list) else [str(cpv)]
+        
+        adjudicante = contract.get('adjudicante', ['N/A'])
+        adjudicante = adjudicante if isinstance(adjudicante, list) else [str(adjudicante)]
+        
+        adjudicatarios = contract.get('adjudicatarios', ['N/A'])
+        adjudicatarios = adjudicatarios if isinstance(adjudicatarios, list) else [str(adjudicatarios)]
+        
+        local = contract.get('localExecucao', ['N/A'])
+        local = local if isinstance(local, list) else [str(local)]
+        
         data.append({
             'View Contract': contract_url,  # New column with link
             'ID': contract_id,
             'Publication Date': contract.get('dataPublicacao', 'N/A'),
             'Object': contract.get('objectoContrato', 'N/A'),
-            'Type': ', '.join(contract.get('tipoContrato', ['N/A'])),
+            'Type': ', '.join(str(x) for x in tipo_contrato),
             'Price (€)': format_price(contract.get('precoContratual', '0')),
-            'CPV Codes': ', '.join(contract.get('cpv', ['N/A'])[:3]),
-            'Contracting Entity': ', '.join(contract.get('adjudicante', ['N/A'])),
-            'Contractors': ', '.join(contract.get('adjudicatarios', ['N/A'])),
-            'Location': ', '.join(contract.get('localExecucao', ['N/A'])),
+            'CPV Codes': ', '.join(str(x) for x in cpv[:3]),
+            'Contracting Entity': ', '.join(str(x) for x in adjudicante),
+            'Contractors': ', '.join(str(x) for x in adjudicatarios),
+            'Location': ', '.join(str(x) for x in local),
         })
     
     return pd.DataFrame(data)
@@ -267,6 +283,10 @@ def announcements_to_dataframe(announcements):
             except:
                 deadline_str = f"+{deadline_days} dias"
         
+        # Safely handle CPVs field
+        cpvs = announcement.get('CPVs', ['N/A'])
+        cpvs = cpvs if isinstance(cpvs, list) else [str(cpvs)]
+        
         data.append({
             'View': announcement_url,
             'Docs': docs_url,
@@ -276,7 +296,7 @@ def announcements_to_dataframe(announcements):
             'Descrição': announcement.get('descricaoAnuncio', 'N/A')[:100],
             'Tipo Procedimento': announcement.get('modeloAnuncio', 'N/A'),
             'Preço Base (€)': format_price(announcement.get('PrecoBase', '0')),
-            'CPV': ', '.join(announcement.get('CPVs', ['N/A'])[:2]),
+            'CPV': ', '.join(str(x) for x in cpvs[:2]),
             'Entidade': announcement.get('designacaoEntidade', 'N/A'),
         })
     
@@ -721,7 +741,7 @@ def main():
                     type_info = pd.DataFrame({
                         'Field': ['Contract Type', 'Procedure Type', 'Framework Agreement'],
                         'Value': [
-                            ', '.join(tipo_contrato),
+                            ', '.join(str(x) for x in tipo_contrato),
                             contract.get('tipoprocedimento', 'N/A'),
                             contract.get('acordoQuadro', 'N/A')
                         ]
