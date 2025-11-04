@@ -153,7 +153,8 @@ def contracts_to_dataframe(contracts):
     
     data = []
     for contract in contracts:
-        contract_id = contract.get('idContrato', 'N/A')
+        # API returns lowercase 'idcontrato' not 'idContrato'
+        contract_id = contract.get('idcontrato') or contract.get('idContrato', 'N/A')
         announcement_id = contract.get('nAnuncio', 'N/A')
         
         # Create Base.gov.pt links
@@ -435,7 +436,7 @@ def main():
                     basic_info = pd.DataFrame({
                         'Field': ['Contract ID', 'Publication Date', 'Celebration Date', 'Contract Price', 'Announcement ID'],
                         'Value': [
-                            contract.get('idContrato', 'N/A'),
+                            contract.get('idcontrato') or contract.get('idContrato', 'N/A'),
                             contract.get('dataPublicacao', 'N/A'),
                             contract.get('dataCelebracaoContrato', 'N/A'),
                             f"€{format_price(contract.get('precoContratual', '0')):,.2f}",
