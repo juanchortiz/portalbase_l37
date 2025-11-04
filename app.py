@@ -227,6 +227,48 @@ def contracts_to_dataframe(contracts):
     return pd.DataFrame(data)
 
 
+def announcements_to_dataframe(announcements):
+    """Convert announcements to a pandas DataFrame with clickable links."""
+    if not announcements:
+        return pd.DataFrame()
+    
+    data = []
+    for announcement in announcements:
+        announcement_id = announcement.get('nAnuncio', 'N/A')
+        
+        # Create Base.gov.pt link
+        announcement_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=anuncios&id={announcement_id}" if announcement_id != 'N/A' else ''
+        docs_url = announcement.get('PecasProcedimento', '')
+        
+        # Calculate deadline date
+        from datetime import datetime, timedelta
+        deadline_days = announcement.get('PrazoPropostas', 0)
+        pub_date_str = announcement.get('dataPublicacao', '')
+        deadline_str = 'N/A'
+        if pub_date_str and deadline_days:
+            try:
+                pub_date = datetime.strptime(pub_date_str, '%d/%m/%Y')
+                deadline = pub_date + timedelta(days=int(deadline_days))
+                deadline_str = deadline.strftime('%d/%m/%Y')
+            except:
+                deadline_str = f"+{deadline_days} dias"
+        
+        data.append({
+            'View': announcement_url,
+            'Docs': docs_url,
+            'N° Anúncio': announcement_id,
+            'Data Publicação': pub_date_str,
+            'Prazo': deadline_str,
+            'Descrição': announcement.get('descricaoAnuncio', 'N/A')[:100],
+            'Tipo Procedimento': announcement.get('modeloAnuncio', 'N/A'),
+            'Preço Base (€)': format_price(announcement.get('PrecoBase', '0')),
+            'CPV': ', '.join(announcement.get('CPVs', ['N/A'])[:2]),
+            'Entidade': announcement.get('designacaoEntidade', 'N/A'),
+        })
+    
+    return pd.DataFrame(data)
+
+
 def main():
     # Hero section with brand gradient background
     st.markdown("""
@@ -379,11 +421,19 @@ def main():
             # Get contracts
             if start_date == end_date:
                 contracts = st.session_state.client.get_contracts_by_date(start_str)
+                announcements = st.session_state.client.get_announcements_by_date(start_str)
             else:
                 contracts = st.session_state.client.get_contracts_by_date_range(start_str, end_str)
+                # Get announcements for the same range
+                announcements = []
+                current_date = start_date
+                while current_date <= end_date:
+                    date_str = current_date.strftime("%d/%m/%Y")
+                    announcements.extend(st.session_state.client.get_announcements_by_date(date_str))
+                    current_date += timedelta(days=1)
             
             # Debug: Show initial results
-            st.info(f"📊 Found {len(contracts)} contracts in date range")
+            st.info(f"📊 Found {len(contracts)} contracts and {len(announcements)} open procedures in date range")
             
             # Apply filters
             filters = {
@@ -410,7 +460,10 @@ def main():
                 st.info(f"🔍 Active filters: {', '.join(active_filters)}")
             
             filtered = filter_contracts(contracts, filters)
+            filtered_announcements = filter_contracts(announcements, filters)  # Uses same filter logic
+            
             st.session_state.filtered_contracts = filtered
+            st.session_state.filtered_announcements = filtered_announcements
             
             # Debug: Show filtered results
             if filtered:
@@ -445,7 +498,7 @@ def main():
         st.markdown("---")
         
         # Tabs for different views
-        tab1, tab2, tab3 = st.tabs(["📊 Table View", "📈 Analytics", "📄 Detailed View"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Contratos", "📢 Procedimentos Abertos", "📈 Analytics", "📄 Detailed View"])
         
         with tab1:
             # Convert to DataFrame
@@ -480,6 +533,69 @@ def main():
             )
         
         with tab2:
+            # Announcements/Open Procedures Tab
+            announcements = st.session_state.filtered_announcements
+            
+            if announcements:
+                st.subheader(f"📢 {len(announcements)} Open Procedures Found")
+                
+                # Convert to DataFrame and display
+                df_announcements = announcements_to_dataframe(announcements)
+                
+                # Display the table with clickable links
+                st.dataframe(
+                    df_announcements,
+                    use_container_width=True,
+                    height=600,
+                    column_config={
+                        "View": st.column_config.LinkColumn(
+                            "🔗 Ver",
+                            help="Click to view announcement on Base.gov.pt",
+                            display_text="Ver"
+                        ),
+                        "Docs": st.column_config.LinkColumn(
+                            "📄 Docs",
+                            help="Click to download procedure documents",
+                            display_text="Docs"
+                        ),
+                        "Preço Base (€)": st.column_config.NumberColumn(
+                            "Preço Base (€)",
+                            format="€%.2f"
+                        )
+                    },
+                    hide_index=True,
+                )
+                
+                # Download button
+                csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download as CSV",
+                    data=csv_announcements,
+                    file_name=f"announcements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                )
+                
+                # Summary statistics
+                st.markdown("---")
+                st.subheader("📊 Procedure Statistics")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    total_base_price = sum(float(a.get('PrecoBase', 0) or 0) for a in announcements)
+                    st.metric("Total Base Price", f"€{total_base_price:,.2f}")
+                
+                with col2:
+                    unique_entities = len(set(a.get('designacaoEntidade', 'N/A') for a in announcements))
+                    st.metric("Unique Entities", unique_entities)
+                
+                with col3:
+                    avg_base_price = total_base_price / len(announcements) if announcements else 0
+                    st.metric("Average Base Price", f"€{avg_base_price:,.2f}")
+            else:
+                st.info("No open procedures found. Try adjusting your search filters or date range.")
+        
+        with tab3:
             col1, col2 = st.columns(2)
             
             with col1:
@@ -527,7 +643,7 @@ def main():
                 st.write(f"**Max Price:** €{max(prices):,.2f}")
                 st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
         
-        with tab3:
+        with tab4:
             # Detailed view of each contract
             st.subheader("Contract Details")
             
