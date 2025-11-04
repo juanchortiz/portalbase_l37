@@ -11,59 +11,54 @@ from cached_api_client import CachedBaseAPIClient
 from config import get_api_key
 import json
 
-# CPV Codes Dictionary - Main divisions and common categories
+# CPV Codes Dictionary - Portuguese Healthcare and Laboratory Focus
 CPV_CODES = {
-    # Main Divisions (2-digit)
-    "03000000": "03 - Agricultural, farming, fishing, forestry products",
-    "09000000": "09 - Petroleum products, fuel, electricity",
-    "14000000": "14 - Mining, basic metals and related products",
-    "15000000": "15 - Food, beverages, tobacco",
-    "16000000": "16 - Agricultural machinery",
-    "18000000": "18 - Clothing, footwear, luggage articles",
-    "19000000": "19 - Leather and textile fabrics, plastic and rubber materials",
-    "22000000": "22 - Printed matter and related products",
-    "24000000": "24 - Chemical products",
-    "30000000": "30 - Office and computing machinery, equipment and supplies",
-    "31000000": "31 - Electrical machinery, apparatus, equipment and consumables",
-    "32000000": "32 - Radio, television, communication equipment",
-    "33000000": "33 - Medical equipments, pharmaceuticals and personal care products",
-    "34000000": "34 - Transport equipment and auxiliary products",
-    "35000000": "35 - Security, fire-fighting, police and defence equipment",
-    "37000000": "37 - Musical instruments, sport goods, games, toys",
-    "38000000": "38 - Laboratory, optical and precision equipments",
-    "39000000": "39 - Furniture, furnishings, domestic appliances",
-    "41000000": "41 - Collected and purified water",
-    "42000000": "42 - Industrial machinery",
-    "43000000": "43 - Mining, quarrying and construction equipment",
-    "44000000": "44 - Construction structures and materials",
-    "45000000": "45 - Construction work",
-    "48000000": "48 - Software package and information systems",
-    "50000000": "50 - Repair and maintenance services",
-    "51000000": "51 - Installation services",
-    "55000000": "55 - Hotel, restaurant and retail trade services",
-    "60000000": "60 - Transport services",
-    "63000000": "63 - Supporting and auxiliary transport services",
-    "64000000": "64 - Postal and telecommunications services",
-    "65000000": "65 - Public utilities",
-    "66000000": "66 - Financial and insurance services",
-    "70000000": "70 - Real estate services",
-    "71000000": "71 - Architectural, construction, engineering and inspection services",
-    "72000000": "72 - IT services: consulting, software development",
-    "73000000": "73 - Research and development services",
-    "75000000": "75 - Administration, defence and social security services",
-    "76000000": "76 - Services related to the oil and gas industry",
-    "77000000": "77 - Agricultural, forestry, horticultural, aquacultural services",
-    "79000000": "79 - Business services: law, marketing, consulting",
-    "80000000": "80 - Education and training services",
-    "85000000": "85 - Health and social work services",
-    "90000000": "90 - Sewage, refuse, cleaning and environmental services",
-    "92000000": "92 - Recreational, cultural and sporting services",
-    "98000000": "98 - Other community, social and personal services",
+    # Healthcare & Medical Equipment
+    "33000000-0": "EQUIPAMENTO MÉDICO, MEDICAMENTOS E PRODUTOS PARA CUIDADOS PESSOAIS",
+    "33100000-1": "EQUIPAMENTO MÉDICO",
+    "33140000-3": "CONSUMÍVEIS MÉDICOS",
+    "33141000-0": "PRODUTOS MÉDICOS DESCARTÁVEIS NÃO QUÍMICOS",
+    "33183000-0": "DISPOSITIVOS DE PERFUSÃO, INJECTÁVEIS E DE IRRIGAÇÃO",
+    "33600000-6": "PRODUTOS FARMACÊUTICOS",
+    "33631000-8": "PRODUTOS FARMACÊUTICOS PARA O APARELHO DIGESTIVO E METABOLISMO",
+    "33651000-4": "PRODUTOS FARMACÊUTICOS PARA O SANGUE E ÓRGÃOS HEMATOPOIÉTICOS",
+    "33690000-3": "PRODUTOS FARMACÊUTICOS VÁRIOS",
+    "33692000-7": "PRODUTOS NUTRICIONAIS",
+    
+    # Laboratory & Diagnostics
+    "33696500-0": "REAGENTES DE LABORATÓRIO",
+    "33698000-4": "KITS DE DIAGNÓSTICO",
+    "33527200-7": "EQUIPAMENTO DE IMAGIOLOGIA MÉDICA",
+    "33124100-3": "APARELHOS DE DIAGNÓSTICO",
+    "38000000-5": "EQUIPAMENTO DE LABORATÓRIO, ÓPTICO E DE PRECISÃO",
+    "38430000-4": "EQUIPAMENTO DE MEDIÇÃO E CONTROLO",
+    "38433000-5": "INSTRUMENTOS DE ANÁLISE",
+    "38434000-2": "INSTRUMENTOS DE LABORATÓRIO",
+    "38436000-6": "EQUIPAMENTO DE TESTES",
+    "24931250-6": "MEIOS DE CULTURA",
+    "24000000-4": "PRODUTOS QUÍMICOS",
+    "24300000-7": "PRODUTOS QUÍMICOS DE BASE",
+    "24900000-6": "PRODUTOS QUÍMICOS DIVERSOS",
+    
+    # Health Services
+    "85000000-9": "SERVIÇOS SAÚDE E ACÇÃO SOCIAL",
+    "85100000-0": "SERVIÇOS DE SAÚDE",
+    "85110000-3": "SERVIÇOS HOSPITALARES E SERVIÇOS CONEXOS",
+    "85121000-3": "SERVIÇOS MÉDICOS",
+    "85140000-2": "SERVIÇOS DIVERSOS DE SAÚDE",
+    "85145000-7": "SERVIÇOS DE ANÁLISES MÉDICAS",
+    
+    # Environmental & Waste Services
+    "90000000-7": "SERVIÇOS RELATIVOS A ÁGUAS RESIDUAIS, RESÍDUOS, LIMPEZA E AMBIENTE",
+    "90500000-2": "SERVIÇOS RELACIONADOS COM RESÍDUOS E LIXO",
+    "90511000-2": "SERVIÇOS DE RECOLHA DE LIXO",
+    "90520000-8": "SERVIÇOS RELACIONADOS COM RESÍDUOS RADIOACTIVOS, TÓXICOS, MÉDICOS E PERIGOSOS",
+    "90524000-6": "SERVIÇOS DE GESTÃO DE RESÍDUOS MÉDICOS",
 }
 
 def get_cpv_display_options():
     """Get CPV codes formatted for display in multiselect."""
-    return [f"{code} - {desc.split(' - ', 1)[1]}" for code, desc in sorted(CPV_CODES.items())]
+    return [f"{code} - {desc}" for code, desc in sorted(CPV_CODES.items())]
 
 def extract_cpv_codes_from_selection(selected_options):
     """Extract CPV codes from selected display options."""
@@ -128,25 +123,6 @@ def filter_contracts(contracts, filters):
             if nif in ' '.join(c.get('adjudicante', [])) or
                nif in ' '.join(c.get('adjudicatarios', []))
         ]
-    
-    # Contract type filter
-    if filters['contract_type'] and filters['contract_type'] != "All":
-        filtered = [
-            c for c in filtered
-            if filters['contract_type'] in c.get('tipoContrato', [])
-        ]
-    
-    # Price range filter
-    if filters['min_price'] is not None or filters['max_price'] is not None:
-        filtered_by_price = []
-        for c in filtered:
-            price = format_price(c.get('precoContratual', '0'))
-            if filters['min_price'] is not None and price < filters['min_price']:
-                continue
-            if filters['max_price'] is not None and price > filters['max_price']:
-                continue
-            filtered_by_price.append(c)
-        filtered = filtered_by_price
     
     # Location filter
     if filters['location']:
@@ -250,34 +226,6 @@ def main():
         help="Filter by contracting entity or contractor NIF"
     )
     
-    # Contract type filter
-    st.sidebar.subheader("Contract Type")
-    contract_types = [
-        "All",
-        "Aquisição de bens móveis",
-        "Aquisição de serviços",
-        "Empreitadas de obras públicas",
-        "Locação de bens móveis"
-    ]
-    contract_type = st.sidebar.selectbox("Type:", contract_types)
-    
-    # Price range filter
-    st.sidebar.subheader("Price Range (€)")
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        min_price = st.number_input("Min:", min_value=0, value=0, step=1000)
-    with col2:
-        max_price = st.number_input("Max:", min_value=0, value=0, step=1000)
-    
-    if max_price > 0 and max_price < min_price:
-        st.sidebar.error("Max price must be greater than min price")
-        max_price = None
-    elif max_price == 0:
-        max_price = None
-    
-    if min_price == 0:
-        min_price = None
-    
     # Location filter
     st.sidebar.subheader("Location")
     location = st.sidebar.text_input(
@@ -330,9 +278,6 @@ def main():
             filters = {
                 'keyword': keyword,
                 'entity_nif': entity_nif,
-                'contract_type': contract_type,
-                'min_price': min_price,
-                'max_price': max_price,
                 'location': location,
                 'cpv_codes': cpv_codes
             }
