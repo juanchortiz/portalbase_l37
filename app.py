@@ -113,7 +113,7 @@ COMMON_LOCATIONS = [
 # Page configuration
 st.set_page_config(
     page_title="Portal Base - Public Procurement",
-    page_icon="📋",
+    page_icon="🚨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -228,9 +228,29 @@ def contracts_to_dataframe(contracts):
 
 
 def main():
-    # Header
-    st.title("📋 Portal Base - Concursos e Contratos Públicos - Link37 App")
-    st.markdown("Filtrar e buscar. Ver infromação de caché")
+    # Header with logos
+    col1, col2, col3 = st.columns([1, 3, 1])
+    
+    with col1:
+        st.markdown("""
+        <a href="https://esn.org" target="_blank">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/ESN_logo.svg/1200px-ESN_logo.svg.png" 
+                 width="100" style="margin-top: 20px;">
+        </a>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.title("🚨 Portal Base - Concursos e Contratos Públicos")
+        st.caption("Powered by Link37")
+    
+    with col3:
+        st.markdown("""
+        <div style="text-align: right; margin-top: 20px;">
+            <span style="font-size: 50px; font-weight: bold; color: #E31E26;">link</span><span style="font-size: 50px; font-weight: bold; color: #E31E26;">37</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
     
     # Sidebar - Filters
     st.sidebar.header("🔍 Filtros")
