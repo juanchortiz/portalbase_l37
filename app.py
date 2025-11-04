@@ -236,9 +236,17 @@ def main():
     
     # Date range selection
     st.sidebar.subheader("Datas")
+    
+    # Show cache info
+    stats = st.session_state.client.get_cache_stats()
+    if stats['years_cached']:
+        last_update = stats['years_cached'][0]['last_fetched'][:10] if stats['years_cached'] else 'Unknown'
+        st.sidebar.caption(f"📅 Cache last updated: {last_update}")
+    
     date_option = st.sidebar.radio(
         "Select period:",
-        ["Today", "Yesterday", "Last 7 days", "Last 30 days", "Custom range"]
+        ["Last 30 days", "Last 90 days", "Custom range", "Today", "Yesterday"],
+        index=0  # Default to Last 30 days
     )
     
     if date_option == "Custom range":
@@ -246,13 +254,13 @@ def main():
         with col1:
             start_date = st.date_input(
                 "Start date",
-                value=datetime.now() - timedelta(days=7),
+                value=datetime.now() - timedelta(days=30),
                 max_value=datetime.now()
             )
         with col2:
             end_date = st.date_input(
                 "End date",
-                value=datetime.now(),
+                value=datetime.now() - timedelta(days=1),  # Default to yesterday
                 max_value=datetime.now()
             )
     else:
@@ -260,12 +268,12 @@ def main():
             start_date = end_date = datetime.now().date()
         elif date_option == "Yesterday":
             start_date = end_date = (datetime.now() - timedelta(days=1)).date()
-        elif date_option == "Last 7 days":
-            start_date = (datetime.now() - timedelta(days=7)).date()
-            end_date = datetime.now().date()
+        elif date_option == "Last 90 days":
+            start_date = (datetime.now() - timedelta(days=90)).date()
+            end_date = (datetime.now() - timedelta(days=1)).date()
         else:  # Last 30 days
             start_date = (datetime.now() - timedelta(days=30)).date()
-            end_date = datetime.now().date()
+            end_date = (datetime.now() - timedelta(days=1)).date()
     
     st.sidebar.markdown("---")
     
