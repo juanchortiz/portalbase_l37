@@ -145,7 +145,7 @@ def format_price(price_str):
 
 
 def filter_contracts(contracts, filters):
-    """Apply filters to contracts."""
+    """Apply filters to contracts and announcements (unified function)."""
     filtered = contracts
     
     # Keyword filter (supports comma-separated keywords)
@@ -154,9 +154,13 @@ def filter_contracts(contracts, filters):
         filtered = [
             c for c in filtered
             if any(
+                # Contract fields
                 keyword in c.get('objectoContrato', '').lower() or
                 keyword in c.get('descContrato', '').lower() or
-                keyword in ' '.join(c.get('cpv', [])).lower()
+                keyword in ' '.join(c.get('cpv', [])).lower() or
+                # Announcement fields
+                keyword in c.get('descricaoAnuncio', '').lower() or
+                keyword in ' '.join(c.get('CPVs', [])).lower()
                 for keyword in keywords
             )
         ]
@@ -167,29 +171,41 @@ def filter_contracts(contracts, filters):
         filtered = [
             c for c in filtered
             if nif in ' '.join(c.get('adjudicante', [])) or
-               nif in ' '.join(c.get('adjudicatarios', []))
+               nif in ' '.join(c.get('adjudicatarios', [])) or
+               nif == str(c.get('nifEntidade', ''))  # Announcement field
         ]
     
-    # Location filter (multiple selection)
+    # Location filter (multiple selection) - only applies to contracts, not announcements
     if filters.get('location') and filters['location']:
         location_list = filters['location'] if isinstance(filters['location'], list) else [filters['location']]
         filtered = [
             c for c in filtered
-            if c.get('localExecucao') and isinstance(c.get('localExecucao'), list) and any(
-                any(filter_loc.lower() in str(loc).lower() for filter_loc in location_list)
-                for loc in c.get('localExecucao', [])
+            # Keep if it's an announcement (no localExecucao) OR if it matches location filter
+            if not c.get('localExecucao') or (  # Announcement without location
+                isinstance(c.get('localExecucao'), list) and any(
+                    any(filter_loc.lower() in str(loc).lower() for filter_loc in location_list)
+                    for loc in c.get('localExecucao', [])
+                )
             )
         ]
     
     # CPV codes filter (multiple selection)
     if filters.get('cpv_codes') and filters['cpv_codes']:
         cpv_list = filters['cpv_codes']
-        # Match CPV codes - check if any selected CPV code is in any contract CPV
+        # Match CPV codes - check if any selected CPV code is in any contract/announcement CPV
         filtered = [
             c for c in filtered
-            if c.get('cpv') and any(
-                any(cpv_filter.split('-')[0] in str(cpv_item) for cpv_filter in cpv_list)
-                for cpv_item in c.get('cpv', [])
+            if (
+                # Contract CPV matching
+                (c.get('cpv') and any(
+                    any(cpv_filter.split('-')[0] in str(cpv_item) for cpv_filter in cpv_list)
+                    for cpv_item in c.get('cpv', [])
+                )) or 
+                # Announcement CPV matching (capital CPVs)
+                (c.get('CPVs') and any(
+                    any(cpv_filter.split('-')[0] in str(cpv_item) for cpv_filter in cpv_list)
+                    for cpv_item in c.get('CPVs', [])
+                ))
             )
         ]
     
