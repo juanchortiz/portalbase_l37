@@ -228,10 +228,10 @@ def contracts_to_dataframe(contracts):
 
 
 def main():
-    # Hero section with gradient background
+    # Hero section with brand gradient background
     st.markdown("""
     <div style="
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        background: linear-gradient(135deg, #6e0102 0%, #191d34 100%);
         height: 200px;
         width: 100%;
         border-radius: 10px;
@@ -245,10 +245,10 @@ def main():
         <div style="color: white;">
             <h1 style="margin: 0; font-size: 2.5em; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🚨 Portal Base</h1>
             <p style="margin: 5px 0 0 0; font-size: 1.2em; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">Concursos e Contratos Públicos</p>
-            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #ffffff;">Powered by Link37</p>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: rgba(255,255,255,0.8);">Powered by Link37</p>
         </div>
         <div style="text-align: right;">
-            <span style="font-size: 60px; font-weight: bold; color: #FFFFFF; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">link</span><span style="font-size: 60px; font-weight: bold; color: #E31E26; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">37</span>
+            <span style="font-size: 60px; font-weight: bold; color: #FFFFFF; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">link</span><span style="font-size: 60px; font-weight: bold; color: #FFFFFF; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">37</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
