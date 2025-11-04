@@ -1,0 +1,458 @@
+"""
+Portal Base - Interactive Web Application
+
+A Streamlit app for browsing and filtering Portuguese public procurement data.
+"""
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+from cached_api_client import CachedBaseAPIClient
+from config import get_api_key
+import json
+
+
+# Page configuration
+st.set_page_config(
+    page_title="Portal Base - Public Procurement",
+    page_icon="📋",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Initialize session state
+if 'client' not in st.session_state:
+    try:
+        ACCESS_TOKEN = get_api_key()
+        st.session_state.client = CachedBaseAPIClient(ACCESS_TOKEN)
+    except ValueError as e:
+        st.error(f"❌ {str(e)}")
+        st.stop()
+
+if 'filtered_contracts' not in st.session_state:
+    st.session_state.filtered_contracts = []
+
+if 'filtered_announcements' not in st.session_state:
+    st.session_state.filtered_announcements = []
+
+
+def format_price(price_str):
+    """Convert Portuguese price format to float."""
+    try:
+        if not price_str or price_str == "N/A":
+            return 0.0
+        return float(str(price_str).replace(".", "").replace(",", "."))
+    except (ValueError, AttributeError):
+        return 0.0
+
+
+def filter_contracts(contracts, filters):
+    """Apply filters to contracts."""
+    filtered = contracts
+    
+    # Keyword filter
+    if filters['keyword']:
+        keyword = filters['keyword'].lower()
+        filtered = [
+            c for c in filtered
+            if keyword in c.get('objectoContrato', '').lower() or
+               keyword in c.get('descContrato', '').lower() or
+               keyword in ' '.join(c.get('cpv', [])).lower()
+        ]
+    
+    # Entity NIF filter
+    if filters['entity_nif']:
+        nif = filters['entity_nif'].strip()
+        filtered = [
+            c for c in filtered
+            if nif in ' '.join(c.get('adjudicante', [])) or
+               nif in ' '.join(c.get('adjudicatarios', []))
+        ]
+    
+    # Contract type filter
+    if filters['contract_type'] and filters['contract_type'] != "All":
+        filtered = [
+            c for c in filtered
+            if filters['contract_type'] in c.get('tipoContrato', [])
+        ]
+    
+    # Price range filter
+    if filters['min_price'] is not None or filters['max_price'] is not None:
+        filtered_by_price = []
+        for c in filtered:
+            price = format_price(c.get('precoContratual', '0'))
+            if filters['min_price'] is not None and price < filters['min_price']:
+                continue
+            if filters['max_price'] is not None and price > filters['max_price']:
+                continue
+            filtered_by_price.append(c)
+        filtered = filtered_by_price
+    
+    # Location filter
+    if filters['location']:
+        location = filters['location'].lower()
+        filtered = [
+            c for c in filtered
+            if any(location in loc.lower() for loc in c.get('localExecucao', []))
+        ]
+    
+    return filtered
+
+
+def contracts_to_dataframe(contracts):
+    """Convert contracts to a pandas DataFrame."""
+    if not contracts:
+        return pd.DataFrame()
+    
+    data = []
+    for contract in contracts:
+        data.append({
+            'ID': contract.get('idContrato', 'N/A'),
+            'Publication Date': contract.get('dataPublicacao', 'N/A'),
+            'Object': contract.get('objectoContrato', 'N/A'),
+            'Type': ', '.join(contract.get('tipoContrato', ['N/A'])),
+            'Price (€)': format_price(contract.get('precoContratual', '0')),
+            'Contracting Entity': ', '.join(contract.get('adjudicante', ['N/A'])),
+            'Contractors': ', '.join(contract.get('adjudicatarios', ['N/A'])),
+            'Location': ', '.join(contract.get('localExecucao', ['N/A'])),
+            'Announcement': contract.get('nAnuncio', 'N/A')
+        })
+    
+    return pd.DataFrame(data)
+
+
+def main():
+    # Header
+    st.title("📋 Portal Base - Public Procurement Browser")
+    st.markdown("Browse and filter Portuguese public procurement data")
+    
+    # Sidebar - Filters
+    st.sidebar.header("🔍 Filters")
+    
+    # Date range selection
+    st.sidebar.subheader("Date Range")
+    date_option = st.sidebar.radio(
+        "Select period:",
+        ["Today", "Yesterday", "Last 7 days", "Last 30 days", "Custom range"]
+    )
+    
+    if date_option == "Custom range":
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            start_date = st.date_input(
+                "Start date",
+                value=datetime.now() - timedelta(days=7),
+                max_value=datetime.now()
+            )
+        with col2:
+            end_date = st.date_input(
+                "End date",
+                value=datetime.now(),
+                max_value=datetime.now()
+            )
+    else:
+        if date_option == "Today":
+            start_date = end_date = datetime.now().date()
+        elif date_option == "Yesterday":
+            start_date = end_date = (datetime.now() - timedelta(days=1)).date()
+        elif date_option == "Last 7 days":
+            start_date = (datetime.now() - timedelta(days=7)).date()
+            end_date = datetime.now().date()
+        else:  # Last 30 days
+            start_date = (datetime.now() - timedelta(days=30)).date()
+            end_date = datetime.now().date()
+    
+    st.sidebar.markdown("---")
+    
+    # Keyword filter
+    st.sidebar.subheader("Keyword Search")
+    keyword = st.sidebar.text_input(
+        "Search in object/description:",
+        help="Search for keywords in contract object, description, or CPV codes"
+    )
+    
+    # Entity filter
+    st.sidebar.subheader("Entity Filter")
+    entity_nif = st.sidebar.text_input(
+        "Entity NIF:",
+        help="Filter by contracting entity or contractor NIF"
+    )
+    
+    # Contract type filter
+    st.sidebar.subheader("Contract Type")
+    contract_types = [
+        "All",
+        "Aquisição de bens móveis",
+        "Aquisição de serviços",
+        "Empreitadas de obras públicas",
+        "Locação de bens móveis"
+    ]
+    contract_type = st.sidebar.selectbox("Type:", contract_types)
+    
+    # Price range filter
+    st.sidebar.subheader("Price Range (€)")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        min_price = st.number_input("Min:", min_value=0, value=0, step=1000)
+    with col2:
+        max_price = st.number_input("Max:", min_value=0, value=0, step=1000)
+    
+    if max_price > 0 and max_price < min_price:
+        st.sidebar.error("Max price must be greater than min price")
+        max_price = None
+    elif max_price == 0:
+        max_price = None
+    
+    if min_price == 0:
+        min_price = None
+    
+    # Location filter
+    st.sidebar.subheader("Location")
+    location = st.sidebar.text_input(
+        "Location:",
+        help="Filter by execution location (e.g., 'Lisboa', 'Porto')"
+    )
+    
+    st.sidebar.markdown("---")
+    
+    # Search button
+    search_button = st.sidebar.button("🔎 Search", type="primary", use_container_width=True)
+    
+    # Cache info in sidebar
+    with st.sidebar.expander("ℹ️ Cache Information"):
+        stats = st.session_state.client.get_cache_stats()
+        st.write(f"**Total contracts cached:** {stats['total_contracts']:,}")
+        st.write(f"**Total announcements cached:** {stats['total_announcements']:,}")
+        if stats['years_cached']:
+            st.write("**Years in cache:**")
+            for year_info in stats['years_cached']:
+                last_fetched = datetime.fromisoformat(year_info['last_fetched'][:19])
+                st.write(f"  • {year_info['year']}: {last_fetched.strftime('%Y-%m-%d %H:%M')}")
+    
+    # Main content area
+    if search_button:
+        with st.spinner('Searching contracts...'):
+            # Convert dates to Portuguese format
+            start_str = start_date.strftime("%d/%m/%Y")
+            end_str = end_date.strftime("%d/%m/%Y")
+            
+            # Get contracts
+            if start_date == end_date:
+                contracts = st.session_state.client.get_contracts_by_date(start_str)
+            else:
+                contracts = st.session_state.client.get_contracts_by_date_range(start_str, end_str)
+            
+            # Apply filters
+            filters = {
+                'keyword': keyword,
+                'entity_nif': entity_nif,
+                'contract_type': contract_type,
+                'min_price': min_price,
+                'max_price': max_price,
+                'location': location
+            }
+            
+            filtered = filter_contracts(contracts, filters)
+            st.session_state.filtered_contracts = filtered
+    
+    # Display results
+    if st.session_state.filtered_contracts:
+        contracts = st.session_state.filtered_contracts
+        
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        total_value = sum(format_price(c.get('precoContratual', '0')) for c in contracts)
+        
+        with col1:
+            st.metric("Total Contracts", len(contracts))
+        with col2:
+            st.metric("Total Value", f"€{total_value:,.2f}")
+        with col3:
+            avg_value = total_value / len(contracts) if contracts else 0
+            st.metric("Average Value", f"€{avg_value:,.2f}")
+        with col4:
+            unique_entities = len(set(
+                entity
+                for c in contracts
+                for entity in c.get('adjudicante', [])
+            ))
+            st.metric("Unique Entities", unique_entities)
+        
+        st.markdown("---")
+        
+        # Tabs for different views
+        tab1, tab2, tab3 = st.tabs(["📊 Table View", "📈 Analytics", "📄 Detailed View"])
+        
+        with tab1:
+            # Convert to DataFrame
+            df = contracts_to_dataframe(contracts)
+            
+            # Display table
+            st.dataframe(
+                df,
+                use_container_width=True,
+                height=600,
+                column_config={
+                    "Price (€)": st.column_config.NumberColumn(
+                        "Price (€)",
+                        format="€%.2f"
+                    )
+                }
+            )
+            
+            # Download button
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download as CSV",
+                data=csv,
+                file_name=f"contracts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+        
+        with tab2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Contract types distribution
+                st.subheader("Contract Types Distribution")
+                type_counts = {}
+                for c in contracts:
+                    for ctype in c.get('tipoContrato', ['Unknown']):
+                        type_counts[ctype] = type_counts.get(ctype, 0) + 1
+                
+                type_df = pd.DataFrame(
+                    list(type_counts.items()),
+                    columns=['Type', 'Count']
+                ).sort_values('Count', ascending=False)
+                
+                st.bar_chart(type_df.set_index('Type'))
+            
+            with col2:
+                # Top contracting entities
+                st.subheader("Top 10 Contracting Entities")
+                entity_counts = {}
+                for c in contracts:
+                    for entity in c.get('adjudicante', []):
+                        entity_counts[entity] = entity_counts.get(entity, 0) + 1
+                
+                top_entities = sorted(
+                    entity_counts.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:10]
+                
+                entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
+                st.dataframe(entity_df, use_container_width=True, hide_index=True)
+            
+            # Price distribution
+            st.subheader("Price Distribution")
+            prices = [format_price(c.get('precoContratual', '0')) for c in contracts]
+            prices = [p for p in prices if p > 0]  # Remove zero prices
+            
+            if prices:
+                price_df = pd.DataFrame({'Price (€)': prices})
+                st.bar_chart(price_df['Price (€)'])
+                
+                st.write(f"**Min Price:** €{min(prices):,.2f}")
+                st.write(f"**Max Price:** €{max(prices):,.2f}")
+                st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
+        
+        with tab3:
+            # Detailed view of each contract
+            st.subheader("Contract Details")
+            
+            # Pagination
+            items_per_page = 10
+            total_pages = (len(contracts) - 1) // items_per_page + 1
+            
+            page = st.number_input(
+                "Page",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1
+            )
+            
+            start_idx = (page - 1) * items_per_page
+            end_idx = min(start_idx + items_per_page, len(contracts))
+            
+            st.write(f"Showing contracts {start_idx + 1} to {end_idx} of {len(contracts)}")
+            
+            for i, contract in enumerate(contracts[start_idx:end_idx], start=start_idx + 1):
+                with st.expander(f"**{i}. {contract.get('objectoContrato', 'N/A')}**"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write(f"**Contract ID:** {contract.get('idContrato', 'N/A')}")
+                        st.write(f"**Publication Date:** {contract.get('dataPublicacao', 'N/A')}")
+                        st.write(f"**Celebration Date:** {contract.get('dataCelebracaoContrato', 'N/A')}")
+                        st.write(f"**Price:** €{format_price(contract.get('precoContratual', '0')):,.2f}")
+                        st.write(f"**Type:** {', '.join(contract.get('tipoContrato', ['N/A']))}")
+                        st.write(f"**Procedure Type:** {contract.get('tipoprocedimento', 'N/A')}")
+                    
+                    with col2:
+                        st.write(f"**Contracting Entity:**")
+                        for entity in contract.get('adjudicante', ['N/A']):
+                            st.write(f"  • {entity}")
+                        
+                        st.write(f"**Contractors:**")
+                        for contractor in contract.get('adjudicatarios', ['N/A']):
+                            st.write(f"  • {contractor}")
+                    
+                    if contract.get('descContrato'):
+                        st.write(f"**Description:** {contract.get('descContrato')}")
+                    
+                    if contract.get('localExecucao'):
+                        st.write(f"**Execution Location:** {', '.join(contract.get('localExecucao', []))}")
+                    
+                    if contract.get('cpv'):
+                        st.write(f"**CPV Codes:** {', '.join(contract.get('cpv', []))}")
+                    
+                    if contract.get('nAnuncio'):
+                        st.write(f"**Announcement:** {contract.get('nAnuncio')}")
+    
+    else:
+        # Welcome message
+        st.info("👈 Use the filters in the sidebar to search for contracts")
+        
+        # Quick stats
+        stats = st.session_state.client.get_cache_stats()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Contracts in Cache", f"{stats['total_contracts']:,}")
+        with col2:
+            st.metric("Total Announcements in Cache", f"{stats['total_announcements']:,}")
+        
+        # Example searches
+        st.markdown("### 💡 Example Searches")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("""
+            **🏥 Healthcare Contracts**
+            - Keywords: "saúde", "hospital", "médico"
+            - Filter by health entities
+            """)
+        
+        with col2:
+            st.markdown("""
+            **🏗️ Construction Projects**
+            - Type: "Empreitadas de obras públicas"
+            - Location: Your city
+            - Price range: Set minimum
+            """)
+        
+        with col3:
+            st.markdown("""
+            **💻 IT Services**
+            - Keywords: "informática", "software"
+            - Type: "Aquisição de serviços"
+            """)
+
+
+if __name__ == "__main__":
+    main()
+
