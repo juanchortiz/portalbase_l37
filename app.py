@@ -228,35 +228,33 @@ def contracts_to_dataframe(contracts):
 
 
 def main():
-    # Header with ESN pattern banner and Link37 logo
+    # Hero section with rocket image
     st.markdown("""
     <div style="
-        background-image: url('https://i.imgur.com/8YqXZ4r.png');
-        background-repeat: repeat-x;
-        background-size: auto 80px;
-        background-position: left center;
-        height: 80px;
+        background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('https://i.imgur.com/xMjK8tn.jpeg');
+        background-size: cover;
+        background-position: center;
+        height: 200px;
         width: 100%;
         border-radius: 10px;
-        margin-bottom: 20px;
-    "></div>
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 40px;
+        margin-bottom: 30px;
+    ">
+        <div style="color: white;">
+            <h1 style="margin: 0; font-size: 2.5em; color: white;">🚨 Portal Base</h1>
+            <p style="margin: 5px 0 0 0; font-size: 1.2em; color: white;">Concursos e Contratos Públicos</p>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #ffcccc;">Powered by Link37</p>
+        </div>
+        <div style="text-align: right;">
+            <span style="font-size: 60px; font-weight: bold; color: #FFFFFF; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">link</span><span style="font-size: 60px; font-weight: bold; color: #E31E26; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">37</span>
+        </div>
+    </div>
     """, unsafe_allow_html=True)
     
-    # Title and Link37 logo
-    col1, col2 = st.columns([4, 1])
-    
-    with col1:
-        st.title("🚨 Portal Base - Concursos e Contratos Públicos")
-        st.caption("Powered by Link37")
-    
-    with col2:
-        st.markdown("""
-        <div style="text-align: right; margin-top: 10px;">
-            <span style="font-size: 50px; font-weight: bold; color: #E31E26;">link</span><span style="font-size: 50px; font-weight: bold; color: #E31E26;">37</span>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
+    st.markdown("")
     
     # Sidebar - Filters
     st.sidebar.header("🔍 Filtros")
