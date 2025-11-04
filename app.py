@@ -165,14 +165,12 @@ def filter_contracts(contracts, filters):
             )
         ]
     
-    # Entity NIF filter
-    if filters['entity_nif']:
-        nif = filters['entity_nif'].strip()
+    # Fornecedor (Supplier) NIF filter
+    if filters['fornecedor_nif']:
+        nif = filters['fornecedor_nif'].strip()
         filtered = [
             c for c in filtered
-            if nif in ' '.join(c.get('adjudicante', [])) or
-               nif in ' '.join(c.get('adjudicatarios', [])) or
-               nif == str(c.get('nifEntidade', ''))  # Announcement field
+            if nif in ' '.join(c.get('adjudicatarios', []))  # Contract suppliers only
         ]
     
     # Location filter (multiple selection) - only applies to contracts, not announcements
@@ -382,11 +380,11 @@ def main():
         help="Enter keywords separated by commas. Example: 'reagentes, laboratório, análises'"
     )
     
-    # Entity filter
-    st.sidebar.subheader("Entity Filter")
-    entity_nif = st.sidebar.text_input(
-        "Entity NIF:",
-        help="Filter by contracting entity or contractor NIF"
+    # Fornecedor (Supplier) filter
+    st.sidebar.subheader("Fornecedor Filter")
+    fornecedor_nif = st.sidebar.text_input(
+        "NIF do Fornecedor:",
+        help="Filter by supplier/contractor NIF"
     )
     
     # Location filter
@@ -454,7 +452,7 @@ def main():
             # Apply filters
             filters = {
                 'keyword': keyword,
-                'entity_nif': entity_nif,
+                'fornecedor_nif': fornecedor_nif,
                 'location': location,
                 'cpv_codes': cpv_codes
             }
@@ -462,7 +460,7 @@ def main():
             # Debug: Show active filters
             active_filters = []
             if keyword: active_filters.append(f"Keywords: {keyword}")
-            if entity_nif: active_filters.append(f"NIF: {entity_nif}")
+            if fornecedor_nif: active_filters.append(f"Fornecedor NIF: {fornecedor_nif}")
             if location: active_filters.append(f"Locations: {len(location)}")
             if cpv_codes: 
                 active_filters.append(f"CPV Codes: {len(cpv_codes)}")
