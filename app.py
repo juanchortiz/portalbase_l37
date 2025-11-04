@@ -598,7 +598,7 @@ def main():
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    total_base_price = sum(float(a.get('PrecoBase', 0) or 0) for a in announcements)
+                    total_base_price = sum(format_price(a.get('PrecoBase', '0')) for a in announcements)
                     st.metric("Total Base Price", f"€{total_base_price:,.2f}")
                 
                 with col2:
@@ -619,32 +619,45 @@ def main():
                 st.subheader("Contract Types Distribution")
                 type_counts = {}
                 for c in contracts:
-                    for ctype in c.get('tipoContrato', ['Unknown']):
+                    tipos = c.get('tipoContrato', ['Unknown'])
+                    if not isinstance(tipos, list):
+                        tipos = [str(tipos)]
+                    for ctype in tipos:
                         type_counts[ctype] = type_counts.get(ctype, 0) + 1
                 
-                type_df = pd.DataFrame(
-                    list(type_counts.items()),
-                    columns=['Type', 'Count']
-                ).sort_values('Count', ascending=False)
-                
-                st.bar_chart(type_df.set_index('Type'))
+                if type_counts:
+                    type_df = pd.DataFrame(
+                        list(type_counts.items()),
+                        columns=['Type', 'Count']
+                    ).sort_values('Count', ascending=False)
+                    
+                    st.bar_chart(type_df.set_index('Type'))
+                else:
+                    st.info("No contract type data available")
             
             with col2:
                 # Top contracting entities
                 st.subheader("Top 10 Contracting Entities")
                 entity_counts = {}
                 for c in contracts:
-                    for entity in c.get('adjudicante', []):
-                        entity_counts[entity] = entity_counts.get(entity, 0) + 1
+                    entities = c.get('adjudicante', [])
+                    if not isinstance(entities, list):
+                        entities = [str(entities)] if entities else []
+                    for entity in entities:
+                        if entity:  # Skip empty strings
+                            entity_counts[entity] = entity_counts.get(entity, 0) + 1
                 
-                top_entities = sorted(
-                    entity_counts.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:10]
-                
-                entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
-                st.dataframe(entity_df, use_container_width=True, hide_index=True)
+                if entity_counts:
+                    top_entities = sorted(
+                        entity_counts.items(),
+                        key=lambda x: x[1],
+                        reverse=True
+                    )[:10]
+                    
+                    entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
+                    st.dataframe(entity_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No entity data available")
             
             # Price distribution
             st.subheader("Price Distribution")
@@ -658,6 +671,8 @@ def main():
                 st.write(f"**Min Price:** €{min(prices):,.2f}")
                 st.write(f"**Max Price:** €{max(prices):,.2f}")
                 st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
+            else:
+                st.info("No price data available")
         
         with tab4:
             # Detailed view of each contract
@@ -698,10 +713,13 @@ def main():
                     
                     # Contract Type and Procedure Table
                     st.markdown("**📝 Type & Procedure**")
+                    tipo_contrato = contract.get('tipoContrato', ['N/A'])
+                    if not isinstance(tipo_contrato, list):
+                        tipo_contrato = [str(tipo_contrato)]
                     type_info = pd.DataFrame({
                         'Field': ['Contract Type', 'Procedure Type', 'Framework Agreement'],
                         'Value': [
-                            ', '.join(contract.get('tipoContrato', ['N/A'])),
+                            ', '.join(tipo_contrato),
                             contract.get('tipoprocedimento', 'N/A'),
                             contract.get('acordoQuadro', 'N/A')
                         ]
@@ -713,31 +731,43 @@ def main():
                     
                     with col1:
                         st.markdown("**🏢 Contracting Entities**")
+                        adjudicante = contract.get('adjudicante', ['N/A'])
+                        if not isinstance(adjudicante, list):
+                            adjudicante = [str(adjudicante)]
                         entities_df = pd.DataFrame({
-                            'Entity': contract.get('adjudicante', ['N/A'])
+                            'Entity': adjudicante
                         })
                         st.dataframe(entities_df, hide_index=True, use_container_width=True)
                     
                     with col2:
                         st.markdown("**👔 Contractors**")
+                        adjudicatarios = contract.get('adjudicatarios', ['N/A'])
+                        if not isinstance(adjudicatarios, list):
+                            adjudicatarios = [str(adjudicatarios)]
                         contractors_df = pd.DataFrame({
-                            'Contractor': contract.get('adjudicatarios', ['N/A'])
+                            'Contractor': adjudicatarios
                         })
                         st.dataframe(contractors_df, hide_index=True, use_container_width=True)
                     
                     # CPV Codes Table
-                    if contract.get('cpv'):
+                    cpv_codes = contract.get('cpv', [])
+                    if cpv_codes:
+                        if not isinstance(cpv_codes, list):
+                            cpv_codes = [str(cpv_codes)]
                         st.markdown("**🏷️ CPV Codes (Classification)**")
                         cpv_df = pd.DataFrame({
-                            'CPV Code': contract.get('cpv', [])
+                            'CPV Code': cpv_codes
                         })
                         st.dataframe(cpv_df, hide_index=True, use_container_width=True)
                     
                     # Location Information
-                    if contract.get('localExecucao'):
+                    locations = contract.get('localExecucao', [])
+                    if locations:
+                        if not isinstance(locations, list):
+                            locations = [str(locations)]
                         st.markdown("**📍 Execution Locations**")
                         location_df = pd.DataFrame({
-                            'Location': contract.get('localExecucao', [])
+                            'Location': locations
                         })
                         st.dataframe(location_df, hide_index=True, use_container_width=True)
                     
