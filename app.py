@@ -163,7 +163,6 @@ def contracts_to_dataframe(contracts):
         
         data.append({
             'View Contract': contract_url,  # New column with link
-            'View Announcement': announcement_url,  # New column with link
             'ID': contract_id,
             'Publication Date': contract.get('dataPublicacao', 'N/A'),
             'Object': contract.get('objectoContrato', 'N/A'),
@@ -336,11 +335,6 @@ def main():
                     "View Contract": st.column_config.LinkColumn(
                         "🔗 Contract",
                         help="Click to view full contract on Base.gov.pt",
-                        display_text="View"
-                    ),
-                    "View Announcement": st.column_config.LinkColumn(
-                        "📢 Announcement", 
-                        help="Click to view announcement on Base.gov.pt",
                         display_text="View"
                     ),
                     "Price (€)": st.column_config.NumberColumn(
@@ -535,10 +529,6 @@ def main():
                     column_config={
                         "View Contract": st.column_config.LinkColumn(
                             "🔗 Contract",
-                            display_text="View"
-                        ),
-                        "View Announcement": st.column_config.LinkColumn(
-                            "📢 Announcement",
                             display_text="View"
                         ),
                         "Price (€)": st.column_config.NumberColumn(
