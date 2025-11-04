@@ -544,33 +544,6 @@ def main():
                 st.warning("No recent contracts found. Use the search filters to load data.")
         except Exception as e:
             st.warning(f"Unable to load sample data. Use the filters to search for contracts.")
-        
-        # Example searches
-        st.markdown("### 💡 Example Searches")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("""
-            **🏥 Healthcare Contracts**
-            - Keywords: "saúde", "hospital", "médico"
-            - Filter by health entities
-            """)
-        
-        with col2:
-            st.markdown("""
-            **🏗️ Construction Projects**
-            - Type: "Empreitadas de obras públicas"
-            - Location: Your city
-            - Price range: Set minimum
-            """)
-        
-        with col3:
-            st.markdown("""
-            **💻 IT Services**
-            - Keywords: "informática", "software"
-            - Type: "Aquisição de serviços"
-            """)
 
 
 if __name__ == "__main__":
