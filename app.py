@@ -136,6 +136,9 @@ if 'filtered_announcements' not in st.session_state:
 if 'search_performed' not in st.session_state:
     st.session_state.search_performed = False
 
+if 'loaded_filters' not in st.session_state:
+    st.session_state.loaded_filters = None
+
 
 def format_price(price_str):
     """Convert Portuguese price format to float."""
@@ -346,17 +349,36 @@ def main():
         last_update = stats['years_cached'][0]['last_fetched'][:10] if stats['years_cached'] else 'Unknown'
         st.sidebar.caption(f"📅 Cache last updated: {last_update}")
     
+    # Check if we have loaded filters
+    loaded = st.session_state.loaded_filters
+    
+    date_options = ["Last 30 days", "Last 90 days", "Custom range", "Today", "Yesterday"]
+    default_date_idx = 0
+    if loaded and loaded.get('date_option'):
+        try:
+            default_date_idx = date_options.index(loaded['date_option'])
+        except ValueError:
+            pass
+    
     date_option = st.sidebar.radio(
         "Select period:",
-        ["Last 30 days", "Last 90 days", "Custom range", "Today", "Yesterday"],
-        index=0  # Default to Last 30 days
+        date_options,
+        index=default_date_idx
     )
     
     if date_option == "Custom range":
         st.sidebar.markdown("**Data Inicial**")
+        default_start = datetime.now() - timedelta(days=30)
+        if loaded and loaded.get('start_date'):
+            try:
+                from datetime import date
+                default_start = date.fromisoformat(loaded['start_date'])
+            except:
+                pass
+        
         start_date = st.sidebar.date_input(
             "Escolher data inicial:",
-            value=datetime.now() - timedelta(days=30),
+            value=default_start,
             max_value=datetime.now(),
             format="DD/MM/YYYY",
             label_visibility="collapsed"
@@ -365,9 +387,17 @@ def main():
         st.sidebar.markdown("**Data Final**")
         col1, col2 = st.sidebar.columns([3, 1])
         with col1:
+            default_end = datetime.now() - timedelta(days=1)
+            if loaded and loaded.get('end_date'):
+                try:
+                    from datetime import date
+                    default_end = date.fromisoformat(loaded['end_date'])
+                except:
+                    pass
+            
             end_date = st.date_input(
                 "Escolher data final:",
-                value=datetime.now() - timedelta(days=1),
+                value=default_end,
                 max_value=datetime.now(),
                 format="DD/MM/YYYY",
                 label_visibility="collapsed"
@@ -398,23 +428,29 @@ def main():
     
     # Keyword filter
     st.sidebar.subheader("Keyword Search")
+    default_keyword = loaded.get('keyword', '') if loaded else ''
     keyword = st.sidebar.text_input(
         "Search keywords (comma-separated):",
+        value=default_keyword,
         help="Enter keywords separated by commas. Example: 'reagentes, laboratório, análises'"
     )
     
     # Fornecedor (Supplier) filter
     st.sidebar.subheader("Fornecedores (adjudicatarios) ")
+    default_nif = loaded.get('fornecedor_nif', '') if loaded else ''
     fornecedor_nif = st.sidebar.text_input(
         "NIF do Fornecedor:",
+        value=default_nif,
         help="Filter by supplier/contractor NIF"
     )
     
     # Location filter
     st.sidebar.subheader("Location")
+    default_locations = loaded.get('location', []) if loaded else []
     selected_locations = st.sidebar.multiselect(
         "Select Locations:",
         options=[loc for loc in COMMON_LOCATIONS if loc != "All"],
+        default=default_locations,
         help="Filter by execution location (select multiple)"
     )
     # Convert list to filter format
@@ -423,14 +459,80 @@ def main():
     # CPV filter
     st.sidebar.subheader("CPV Classification")
     cpv_options = get_cpv_display_options()
+    default_cpvs = loaded.get('cpv_codes', []) if loaded else []
     selected_cpvs = st.sidebar.multiselect(
         "Select CPV Categories:",
         options=cpv_options,
-        default=None,
+        default=default_cpvs,
         help="Select one or more CPV categories. Use the search to find specific categories.",
         placeholder="Search and select CPV codes..."
     )
     cpv_codes = extract_cpv_codes_from_selection(selected_cpvs)
+    
+    # Clear loaded filters after applying them
+    if st.session_state.loaded_filters:
+        st.session_state.loaded_filters = None
+    
+    st.sidebar.markdown("---")
+    
+    # Saved Searches section
+    with st.sidebar.expander("💾 Saved Searches"):
+        # Get all saved searches
+        saved_searches = st.session_state.client.get_saved_searches()
+        
+        # Load saved search
+        if saved_searches:
+            st.markdown("**Load a saved search:**")
+            search_names = [s['name'] for s in saved_searches]
+            selected_search = st.selectbox(
+                "Select search:",
+                [""] + search_names,
+                label_visibility="collapsed"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📂 Load", disabled=not selected_search, use_container_width=True):
+                    loaded_filters = st.session_state.client.load_search(selected_search)
+                    if loaded_filters:
+                        # Store loaded filters to apply them
+                        st.session_state.loaded_filters = loaded_filters
+                        st.success(f"Loaded: {selected_search}")
+                        st.rerun()
+            with col2:
+                if st.button("🗑️ Delete", disabled=not selected_search, use_container_width=True):
+                    if st.session_state.client.delete_search(selected_search):
+                        st.success(f"Deleted: {selected_search}")
+                        st.rerun()
+        else:
+            st.info("No saved searches yet")
+        
+        st.markdown("---")
+        
+        # Save current search
+        st.markdown("**Save current filters:**")
+        search_name = st.text_input(
+            "Search name:",
+            placeholder="e.g., Lab Equipment Porto",
+            label_visibility="collapsed"
+        )
+        if st.button("💾 Save Search", use_container_width=True, disabled=not search_name):
+            # Collect current filters
+            current_filters = {
+                'date_option': date_option,
+                'start_date': start_date.isoformat() if date_option == "Custom range" else None,
+                'end_date': end_date.isoformat() if date_option == "Custom range" else None,
+                'keyword': keyword,
+                'fornecedor_nif': fornecedor_nif,
+                'location': location,
+                'cpv_codes': selected_cpvs
+            }
+            
+            if st.session_state.client.save_search(search_name, current_filters):
+                st.success(f"✅ Saved: {search_name}")
+                st.rerun()
+            else:
+                st.error(f"❌ Name '{search_name}' already exists")
     
     st.sidebar.markdown("---")
     

@@ -78,6 +78,17 @@ class CachedBaseAPIClient:
             )
         """)
         
+        # Create saved searches table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS saved_searches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                filters TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used TIMESTAMP
+            )
+        """)
+        
         # Create index on publication dates for faster queries
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_contract_pub_date 
@@ -353,4 +364,117 @@ class CachedBaseAPIClient:
                 for year, last_fetched, count in years_cached
             ]
         }
+    
+    def save_search(self, name: str, filters: Dict[str, Any]) -> bool:
+        """
+        Save a search with a name.
+        
+        Args:
+            name: Name for the saved search
+            filters: Dictionary of filter settings
+            
+        Returns:
+            True if successful, False if name already exists
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO saved_searches (name, filters)
+                VALUES (?, ?)
+            """, (name, json.dumps(filters)))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except sqlite3.IntegrityError:
+            # Name already exists
+            return False
+    
+    def get_saved_searches(self) -> List[Dict[str, Any]]:
+        """
+        Get all saved searches.
+        
+        Returns:
+            List of saved searches with their metadata
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, name, filters, created_at, last_used
+            FROM saved_searches
+            ORDER BY name
+        """)
+        
+        searches = []
+        for row in cursor.fetchall():
+            searches.append({
+                'id': row[0],
+                'name': row[1],
+                'filters': json.loads(row[2]),
+                'created_at': row[3],
+                'last_used': row[4]
+            })
+        
+        conn.close()
+        return searches
+    
+    def load_search(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Load a saved search by name.
+        
+        Args:
+            name: Name of the saved search
+            
+        Returns:
+            Dictionary of filters or None if not found
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT filters FROM saved_searches
+            WHERE name = ?
+        """, (name,))
+        
+        result = cursor.fetchone()
+        
+        if result:
+            # Update last_used timestamp
+            cursor.execute("""
+                UPDATE saved_searches
+                SET last_used = CURRENT_TIMESTAMP
+                WHERE name = ?
+            """, (name,))
+            conn.commit()
+        
+        conn.close()
+        
+        return json.loads(result[0]) if result else None
+    
+    def delete_search(self, name: str) -> bool:
+        """
+        Delete a saved search.
+        
+        Args:
+            name: Name of the saved search to delete
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            DELETE FROM saved_searches
+            WHERE name = ?
+        """, (name,))
+        
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        
+        return deleted
 
