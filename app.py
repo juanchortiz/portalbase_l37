@@ -184,10 +184,11 @@ def filter_contracts(contracts, filters):
     # CPV codes filter (multiple selection)
     if filters.get('cpv_codes') and filters['cpv_codes']:
         cpv_list = filters['cpv_codes']
+        # Match CPV codes - check if any selected CPV code is in any contract CPV
         filtered = [
             c for c in filtered
-            if any(
-                any(cpv_filter in str(cpv_item) for cpv_filter in cpv_list)
+            if c.get('cpv') and any(
+                any(cpv_filter.split('-')[0] in str(cpv_item) for cpv_filter in cpv_list)
                 for cpv_item in c.get('cpv', [])
             )
         ]
@@ -358,7 +359,13 @@ def main():
             if keyword: active_filters.append(f"Keywords: {keyword}")
             if entity_nif: active_filters.append(f"NIF: {entity_nif}")
             if location: active_filters.append(f"Locations: {len(location)}")
-            if cpv_codes: active_filters.append(f"CPV Codes: {len(cpv_codes)}")
+            if cpv_codes: 
+                active_filters.append(f"CPV Codes: {len(cpv_codes)}")
+                with st.expander("🔍 View selected CPV codes"):
+                    for code in cpv_codes[:10]:
+                        st.write(f"- {code}")
+                    if len(cpv_codes) > 10:
+                        st.write(f"... and {len(cpv_codes) - 10} more")
             
             if active_filters:
                 st.info(f"🔍 Active filters: {', '.join(active_filters)}")
