@@ -118,20 +118,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state
-@st.cache_resource
-def get_api_client():
-    """Initialize and cache the API client"""
-    try:
-        ACCESS_TOKEN = get_api_key()
-        return CachedBaseAPIClient(ACCESS_TOKEN)
-    except Exception as e:
-        st.error(f"❌ Error initializing client: {str(e)}")
-        st.stop()
-        return None
-
+# Initialize session state - lazy loading to avoid startup delays
 if 'client' not in st.session_state:
-    st.session_state.client = get_api_client()
+    st.session_state.client = None
+    
+if 'client_initialized' not in st.session_state:
+    st.session_state.client_initialized = False
 
 if 'filtered_contracts' not in st.session_state:
     st.session_state.filtered_contracts = []
@@ -342,6 +334,18 @@ def main():
     """, unsafe_allow_html=True)
     
     st.markdown("")
+    
+    # Initialize API client lazily
+    if not st.session_state.client_initialized:
+        try:
+            with st.spinner('Initializing database...'):
+                ACCESS_TOKEN = get_api_key()
+                st.session_state.client = CachedBaseAPIClient(ACCESS_TOKEN)
+                st.session_state.client_initialized = True
+        except Exception as e:
+            st.error(f"❌ Error initializing: {str(e)}")
+            st.info("Please refresh the page or check your API key configuration.")
+            st.stop()
     
     # Sidebar - Filters
     st.sidebar.header("🔍 Filtros")
