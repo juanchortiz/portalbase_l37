@@ -119,13 +119,19 @@ st.set_page_config(
 )
 
 # Initialize session state
-if 'client' not in st.session_state:
+@st.cache_resource
+def get_api_client():
+    """Initialize and cache the API client"""
     try:
         ACCESS_TOKEN = get_api_key()
-        st.session_state.client = CachedBaseAPIClient(ACCESS_TOKEN)
-    except ValueError as e:
-        st.error(f"❌ {str(e)}")
+        return CachedBaseAPIClient(ACCESS_TOKEN)
+    except Exception as e:
+        st.error(f"❌ Error initializing client: {str(e)}")
         st.stop()
+        return None
+
+if 'client' not in st.session_state:
+    st.session_state.client = get_api_client()
 
 if 'filtered_contracts' not in st.session_state:
     st.session_state.filtered_contracts = []
@@ -478,7 +484,11 @@ def main():
     # Saved Searches section
     with st.sidebar.expander("💾 Saved Searches"):
         # Get all saved searches
-        saved_searches = st.session_state.client.get_saved_searches()
+        try:
+            saved_searches = st.session_state.client.get_saved_searches()
+        except Exception as e:
+            st.error(f"Error loading saved searches: {str(e)}")
+            saved_searches = []
         
         # Load saved search
         if saved_searches:
