@@ -37,11 +37,13 @@ def get_api_key():
     if os.path.exists(secrets_file):
         try:
             with open(secrets_file, 'r') as f:
-                content = f.read().strip()
-                # Handle format: BASE_API_KEY:"value" or BASE_API_KEY:value
-                if ':' in content:
-                    api_key = content.split(':', 1)[1].strip().strip('"')
-                    return api_key
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('BASE_API_KEY'):
+                        if ':' in line:
+                            api_key = line.split(':', 1)[1].strip().strip('"')
+                            if api_key:
+                                return api_key
         except Exception as e:
             pass
     
@@ -58,4 +60,49 @@ try:
 except ValueError:
     BASE_API_KEY = None
     print("⚠️  Warning: API key not configured. Please set BASE_API_KEY environment variable or create Secrets file.")
+
+
+def get_hubspot_token():
+    """
+    Get HubSpot API token from environment variable or Secrets file.
+    
+    Returns:
+        str: The HubSpot API token
+        
+    Raises:
+        ValueError: If token is not found
+    """
+    # Try environment variable first
+    token = os.environ.get('HUBSPOT_API_TOKEN')
+    if token:
+        return token
+    
+    # Try reading from Secrets file (for local development)
+    secrets_file = os.path.join(os.path.dirname(__file__), 'Secrets')
+    if os.path.exists(secrets_file):
+        try:
+            with open(secrets_file, 'r') as f:
+                content = f.read().strip()
+                # Handle format: HUBSPOT_API_TOKEN:"value" or HUBSPOT_API_TOKEN:value
+                for line in content.split('\n'):
+                    if line.strip().startswith('HUBSPOT_API_TOKEN'):
+                        if ':' in line:
+                            token = line.split(':', 1)[1].strip().strip('"')
+                            if token:
+                                return token
+        except Exception:
+            pass
+    
+    # Try Streamlit secrets (for cloud deployments)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'HUBSPOT_API_TOKEN' in st.secrets:
+            return st.secrets['HUBSPOT_API_TOKEN']
+    except (ImportError, FileNotFoundError, KeyError):
+        pass
+    
+    raise ValueError(
+        "HubSpot API token not found! Please set HUBSPOT_API_TOKEN environment variable "
+        "or add it to Secrets file as: HUBSPOT_API_TOKEN:\"your_token_here\""
+    )
 

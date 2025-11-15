@@ -89,6 +89,31 @@ class CachedBaseAPIClient:
             )
         """)
         
+        # Create processed announcements table (for HubSpot automation)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS processed_announcements (
+                n_anuncio TEXT PRIMARY KEY,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                hubspot_deal_id TEXT,
+                saved_search_name TEXT,
+                UNIQUE(n_anuncio)
+            )
+        """)
+        
+        # Create daily sync log table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS daily_sync_log (
+                sync_date TEXT PRIMARY KEY,
+                announcements_fetched INTEGER DEFAULT 0,
+                announcements_new INTEGER DEFAULT 0,
+                deals_created INTEGER DEFAULT 0,
+                deals_failed INTEGER DEFAULT 0,
+                sync_status TEXT,
+                error_message TEXT,
+                sync_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         # Create index on publication dates for faster queries
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_contract_pub_date 
@@ -98,6 +123,11 @@ class CachedBaseAPIClient:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_announcement_pub_date 
             ON announcements(data_publicacao)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_processed_announcements 
+            ON processed_announcements(n_anuncio)
         """)
         
         conn.commit()
@@ -477,4 +507,242 @@ class CachedBaseAPIClient:
         conn.close()
         
         return deleted
+    
+    def sync_new_announcements(self, start_date: str, end_date: str) -> List[Dict[str, Any]]:
+        """
+        Sync only new announcements for a date range (incremental update).
+        
+        Fetches announcements from API and only stores those not already in cache.
+        This is more efficient than syncing entire year.
+        
+        Args:
+            start_date: Start date in format "DD/MM/YYYY"
+            end_date: End date in format "DD/MM/YYYY"
+            
+        Returns:
+            List of newly added announcement dictionaries
+        """
+        # Get year(s) for the date range
+        start_year = start_date.split("/")[2]
+        end_year = end_date.split("/")[2]
+        
+        new_announcements = []
+        
+        # Fetch announcements for each year in range
+        for year in range(int(start_year), int(end_year) + 1):
+            try:
+                year_str = str(year)
+                print(f"Fetching announcements for year {year_str}...")
+                announcements = self.client.get_announcement_info(ano=year_str)
+                if not isinstance(announcements, list):
+                    announcements = [announcements] if announcements else []
+                
+                # Convert dates for comparison
+                def convert_date(date_str):
+                    """Convert DD/MM/YYYY to YYYY-MM-DD"""
+                    if not date_str:
+                        return None
+                    parts = date_str.split('/')
+                    if len(parts) != 3:
+                        return None
+                    return f"{parts[2]}-{parts[1]}-{parts[0]}"
+                
+                start_comparable = convert_date(start_date)
+                end_comparable = convert_date(end_date)
+                
+                # Filter announcements by date range and check if already in cache
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                
+                for announcement in announcements:
+                    pub_date = announcement.get('dataPublicacao', '')
+                    if not pub_date:
+                        continue
+                    
+                    pub_comparable = convert_date(pub_date)
+                    if not pub_comparable:
+                        continue
+                    
+                    # Check if within date range
+                    if start_comparable <= pub_comparable <= end_comparable:
+                        n_anuncio = announcement.get('nAnuncio')
+                        if not n_anuncio:
+                            continue
+                        
+                        # Check if already in cache
+                        cursor.execute(
+                            "SELECT n_anuncio FROM announcements WHERE n_anuncio = ?",
+                            (n_anuncio,)
+                        )
+                        if not cursor.fetchone():
+                            # New announcement - store it
+                            cursor.execute("""
+                                INSERT OR REPLACE INTO announcements 
+                                (n_anuncio, data_publicacao, ano, tipo_anuncio, nif_entidade, 
+                                 raw_data, last_updated)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                n_anuncio,
+                                pub_date,
+                                announcement.get('Ano'),
+                                announcement.get('TipoAnuncio'),
+                                announcement.get('nifEntidade'),
+                                json.dumps(announcement),
+                                datetime.now().isoformat()
+                            ))
+                            new_announcements.append(announcement)
+                
+                conn.commit()
+                conn.close()
+                
+            except Exception as e:
+                print(f"❌ Error syncing announcements for year {year}: {e}")
+        
+        print(f"✅ Found {len(new_announcements)} new announcements")
+        return new_announcements
+    
+    def get_announcements_by_date_range(
+        self, 
+        start_date: str, 
+        end_date: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all announcements published within a date range.
+        
+        Args:
+            start_date: Start date in format "DD/MM/YYYY"
+            end_date: End date in format "DD/MM/YYYY"
+            
+        Returns:
+            List of announcement dictionaries
+        """
+        # Ensure relevant years are synced
+        start_year = start_date.split("/")[2]
+        end_year = end_date.split("/")[2]
+        
+        for year in range(int(start_year), int(end_year) + 1):
+            if self._should_refresh_cache(str(year)):
+                self.sync_year(str(year))
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Convert DD/MM/YYYY to comparable format YYYY-MM-DD for proper date comparison
+        def convert_date(date_str):
+            """Convert DD/MM/YYYY to YYYY-MM-DD"""
+            parts = date_str.split('/')
+            return f"{parts[2]}-{parts[1]}-{parts[0]}"
+        
+        start_comparable = convert_date(start_date)
+        end_comparable = convert_date(end_date)
+        
+        # Get all announcements and filter by date
+        cursor.execute("""
+            SELECT raw_data, data_publicacao FROM announcements 
+            WHERE data_publicacao LIKE ?
+        """, (f"%/{start_year}",))
+        
+        results = []
+        for row in cursor.fetchall():
+            date_pub = row[1]
+            if date_pub:
+                comparable_date = convert_date(date_pub)
+                if start_comparable <= comparable_date <= end_comparable:
+                    results.append(row[0])
+        
+        conn.close()
+        
+        return [json.loads(data) for data in results]
+    
+    def is_announcement_processed(self, n_anuncio: str) -> bool:
+        """
+        Check if an announcement has already been processed for HubSpot.
+        
+        Args:
+            n_anuncio: Announcement number
+            
+        Returns:
+            True if already processed, False otherwise
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT n_anuncio FROM processed_announcements WHERE n_anuncio = ?",
+            (n_anuncio,)
+        )
+        result = cursor.fetchone() is not None
+        
+        conn.close()
+        return result
+    
+    def mark_announcement_processed(
+        self, 
+        n_anuncio: str, 
+        hubspot_deal_id: str = None,
+        saved_search_name: str = None
+    ):
+        """
+        Mark an announcement as processed for HubSpot automation.
+        
+        Args:
+            n_anuncio: Announcement number
+            hubspot_deal_id: HubSpot deal ID if deal was created
+            saved_search_name: Name of saved search used for filtering
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO processed_announcements 
+            (n_anuncio, hubspot_deal_id, saved_search_name, processed_at)
+            VALUES (?, ?, ?, ?)
+        """, (n_anuncio, hubspot_deal_id, saved_search_name, datetime.now().isoformat()))
+        
+        conn.commit()
+        conn.close()
+    
+    def log_daily_sync(
+        self,
+        sync_date: str,
+        announcements_fetched: int,
+        announcements_new: int,
+        deals_created: int,
+        deals_failed: int,
+        sync_status: str = "success",
+        error_message: str = None
+    ):
+        """
+        Log daily sync operation results.
+        
+        Args:
+            sync_date: Date of sync in format "YYYY-MM-DD"
+            announcements_fetched: Number of announcements fetched from API
+            announcements_new: Number of new announcements added to cache
+            deals_created: Number of HubSpot deals created
+            deals_failed: Number of failed deal creations
+            sync_status: Status ("success", "error", "partial")
+            error_message: Error message if any
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO daily_sync_log 
+            (sync_date, announcements_fetched, announcements_new, deals_created, 
+             deals_failed, sync_status, error_message, sync_timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            sync_date,
+            announcements_fetched,
+            announcements_new,
+            deals_created,
+            deals_failed,
+            sync_status,
+            error_message,
+            datetime.now().isoformat()
+        ))
+        
+        conn.commit()
+        conn.close()
 

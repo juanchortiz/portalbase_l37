@@ -1,0 +1,45 @@
+name: Daily Portal Base Sync
+
+on:
+  schedule:
+    # Run daily at 5:30 PM UTC (6:30 PM Portugal time, after Base.gov.pt publishes)
+    - cron: '30 17 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  sync-and-create-deals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run daily automation
+        env:
+          BASE_API_KEY: ${{ secrets.BASE_API_KEY }}
+          HUBSPOT_API_TOKEN: ${{ secrets.HUBSPOT_API_TOKEN }}
+          AUTOMATION_SAVED_SEARCH: ${{ secrets.AUTOMATION_SAVED_SEARCH || 'Default Automation' }}
+          DAYS_TO_CHECK: ${{ secrets.DAYS_TO_CHECK || '1' }}
+        run: |
+          python daily_automation.py
+      
+      - name: Upload database (optional - for backup)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-cache-db
+          path: base_cache.db
+          retention-days: 7
+          if-no-files-found: ignore
+
