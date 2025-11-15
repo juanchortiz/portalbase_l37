@@ -26,11 +26,11 @@ jobs:
           pip install -r requirements.txt
       
       - name: Download database from previous run
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: base-cache-db
           path: .
-          if-no-files-found: ignore
       
       - name: Run daily automation
         env:
