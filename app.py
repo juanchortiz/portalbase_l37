@@ -1018,7 +1018,7 @@ def main():
                 # Summary metrics for announcements
                 col1, col2, col3, col4 = st.columns(4)
                 
-                total_base_price = sum(float(a.get('PrecoBase', 0) or 0) for a in announcements)
+                total_base_price = sum(format_price(a.get('PrecoBase', '0')) for a in announcements)
                 
                 with col1:
                     st.metric("Total Open Procedures", len(announcements))
