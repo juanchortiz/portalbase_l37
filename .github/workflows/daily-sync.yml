@@ -32,6 +32,58 @@ jobs:
           name: base-cache-db
           path: .
       
+      - name: Update saved search from JSON (if exists)
+        continue-on-error: true
+        run: |
+          if [ -f "Biogerm_search.json" ]; then
+            echo "📋 Found Biogerm_search.json - updating saved search..."
+            python3 << 'EOF'
+          import sqlite3
+          import json
+          import os
+          
+          search_file = "Biogerm_search.json"
+          
+          if os.path.exists(search_file):
+              with open(search_file, 'r') as f:
+                  search_data = json.load(f)
+              
+              db_path = 'base_cache.db'
+              
+              # Create database if it doesn't exist
+              conn = sqlite3.connect(db_path)
+              cursor = conn.cursor()
+              
+              # Ensure saved_searches table exists
+              cursor.execute("""
+                  CREATE TABLE IF NOT EXISTS saved_searches (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      name TEXT UNIQUE NOT NULL,
+                      filters TEXT NOT NULL,
+                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                      last_used TIMESTAMP
+                  )
+              """)
+              
+              # Insert or update the search
+              filters_json = json.dumps(search_data['filters'])
+              cursor.execute("""
+                  INSERT OR REPLACE INTO saved_searches (name, filters, last_used)
+                  VALUES (?, ?, datetime('now'))
+              """, (search_data['name'], filters_json))
+              
+              conn.commit()
+              conn.close()
+              
+              print(f"✅ Updated saved search: {search_data['name']}")
+              print(f"   CPV Codes: {search_data['filters'].get('cpv_codes', [])}")
+          else:
+              print("⚠️  Biogerm_search.json not found - skipping search update")
+          EOF
+          else
+            echo "⚠️  Biogerm_search.json not found - skipping search update"
+          fi
+      
       - name: Run daily automation
         env:
           BASE_API_KEY: ${{ secrets.BASE_API_KEY }}
