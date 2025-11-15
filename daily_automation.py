@@ -62,38 +62,26 @@ def main():
             all_searches = client.get_saved_searches()
             
             if not all_searches:
-                # First run - create default search to allow automation to start
-                print(f"⚠️  Saved search '{SAVED_SEARCH_NAME}' not found!")
-                print("💡 This appears to be the first run (no saved searches found).")
-                print(f"💡 Creating default '{SAVED_SEARCH_NAME}' search with empty filters.")
-                print("⚠️  IMPORTANT: Please configure this search in the Streamlit app for proper filtering!")
+                # First run - FAIL instead of creating empty search
+                error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found and no saved searches exist!"
+                print(f"❌ {error_msg}")
+                print(f"\n⚠️  CRITICAL: Cannot proceed with empty filters - this would create deals for ALL announcements!")
+                print(f"\n💡 To fix this:")
+                print(f"   1. Go to GitHub Actions → 'Update Saved Search' workflow")
+                print(f"   2. Run it with search_file: 'Biogerm_search.json'")
+                print(f"   3. Or create the search '{SAVED_SEARCH_NAME}' in the Streamlit app first")
+                print(f"   4. Then sync the database to GitHub Actions")
                 
-                # Create search with empty filters (user must configure in app)
-                default_filters = {
-                    "keyword": "",
-                    "fornecedor_nif": "",
-                    "location": [],
-                    "cpv_codes": []
-                }
-                
-                try:
-                    client.save_search(SAVED_SEARCH_NAME, default_filters)
-                    print(f"✅ Created '{SAVED_SEARCH_NAME}' search with empty filters")
-                    print("⚠️  WARNING: This search will match ALL announcements until configured!")
-                    filters = default_filters
-                except Exception as e:
-                    error_msg = f"Failed to create default search: {str(e)}"
-                    print(f"❌ {error_msg}")
-                    client.log_daily_sync(
-                        sync_date=sync_date,
-                        announcements_fetched=0,
-                        announcements_new=0,
-                        deals_created=0,
-                        deals_failed=0,
-                        sync_status="error",
-                        error_message=error_msg
-                    )
-                    sys.exit(1)
+                client.log_daily_sync(
+                    sync_date=sync_date,
+                    announcements_fetched=0,
+                    announcements_new=0,
+                    deals_created=0,
+                    deals_failed=0,
+                    sync_status="error",
+                    error_message=error_msg
+                )
+                sys.exit(1)
             else:
                 # Other searches exist but not the requested one - fail
                 error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found!"
@@ -102,6 +90,7 @@ def main():
                 for search in all_searches:
                     print(f"   - {search['name']}")
                 print(f"\n⚠️  Please create and save the search '{SAVED_SEARCH_NAME}' in the Streamlit app first.")
+                print(f"   Or use the 'Update Saved Search' workflow to sync it from the repository.")
                 
                 client.log_daily_sync(
                     sync_date=sync_date,
@@ -121,6 +110,34 @@ def main():
         print(f"   - Locations: {filters.get('location', [])}")
         print(f"   - CPV Codes: {filters.get('cpv_codes', [])}")
         print(f"   - Search Type: {filters.get('search_type', 'not set')}")
+        
+        # Validate filters - fail if all filters are empty
+        has_filters = (
+            filters.get('keyword', '').strip() or
+            filters.get('fornecedor_nif', '').strip() or
+            filters.get('location', []) or
+            filters.get('cpv_codes', [])
+        )
+        
+        if not has_filters:
+            error_msg = f"CRITICAL: Saved search '{SAVED_SEARCH_NAME}' has empty filters! This would create deals for ALL announcements."
+            print(f"\n❌ {error_msg}")
+            print(f"\n💡 To fix this:")
+            print(f"   1. Go to GitHub Actions → 'Update Saved Search' workflow")
+            print(f"   2. Run it with search_file: 'Biogerm_search.json'")
+            print(f"   3. Or update the search '{SAVED_SEARCH_NAME}' in the Streamlit app with proper filters")
+            
+            client.log_daily_sync(
+                sync_date=sync_date,
+                announcements_fetched=0,
+                announcements_new=0,
+                deals_created=0,
+                deals_failed=0,
+                sync_status="error",
+                error_message=error_msg
+            )
+            sys.exit(1)
+        
         print()
         
         # Sync new announcements
