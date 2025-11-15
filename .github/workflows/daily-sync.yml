@@ -25,6 +25,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
+      - name: Download database from previous run
+        uses: actions/download-artifact@v4
+        with:
+          name: base-cache-db
+          path: .
+          if-no-files-found: ignore
+      
       - name: Run daily automation
         env:
           BASE_API_KEY: ${{ secrets.BASE_API_KEY }}

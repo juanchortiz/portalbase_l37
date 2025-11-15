@@ -61,37 +61,71 @@ def main():
             # Try to fallback to "Default Automation" if the specified search doesn't exist
             print(f"⚠️  Saved search '{SAVED_SEARCH_NAME}' not found!")
             print("💡 Attempting to use 'Default Automation' as fallback...")
-            filters = client.load_search('Default Automation')
+            fallback_filters = client.load_search('Default Automation')
             
-            if not filters:
-                error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found, and 'Default Automation' also not found!"
-                print(f"❌ {error_msg}")
-                print("\n💡 Available saved searches:")
-                searches = client.get_saved_searches()
-                if searches:
-                    for search in searches:
-                        print(f"   - {search['name']}")
-                else:
-                    print("   (no saved searches found)")
-                
-                client.log_daily_sync(
-                    sync_date=sync_date,
-                    announcements_fetched=0,
-                    announcements_new=0,
-                    deals_created=0,
-                    deals_failed=0,
-                    sync_status="error",
-                    error_message=error_msg
-                )
-                sys.exit(1)
-            else:
+            if fallback_filters:
                 print(f"✅ Using 'Default Automation' filters as fallback")
-                # Optionally create the requested search with the same filters
+                filters = fallback_filters
+                # Create the requested search with the same filters for next time
                 try:
                     client.save_search(SAVED_SEARCH_NAME, filters)
                     print(f"✅ Created saved search '{SAVED_SEARCH_NAME}' with same filters")
                 except:
                     pass  # Ignore if save fails (e.g., already exists)
+            else:
+                # No saved searches exist - create default one with common Biogerm filters
+                print("💡 No saved searches found. Creating default 'Biogerm' search...")
+                default_filters = {
+                    "keyword": "",
+                    "fornecedor_nif": "",
+                    "location": [],
+                    "cpv_codes": [
+                        "33696500-0",  # REAGENTES DE LABORATÓRIO
+                        "33000000-0",  # EQUIPAMENTO MÉDICO, MEDICAMENTOS E PRODUTOS PARA CUIDADOS PESSOAIS
+                        "33600000-6",  # PRODUTOS FARMACÊUTICOS
+                        "24931250-6",  # MEIOS DE CULTURA
+                        "85000000-9",  # SERVIÇOS SAÚDE E ACÇÃO SOCIAL
+                        "90000000-7"   # SERVIÇOS RELATIVOS A ÁGUAS RESIDUAIS, RESÍDUOS, LIMPEZA E AMBIENTE
+                    ]
+                }
+                
+                # Create both searches
+                try:
+                    client.save_search('Default Automation', default_filters)
+                    print("✅ Created 'Default Automation' search")
+                except:
+                    pass
+                
+                try:
+                    client.save_search(SAVED_SEARCH_NAME, default_filters)
+                    print(f"✅ Created saved search '{SAVED_SEARCH_NAME}' with default filters")
+                    filters = default_filters
+                except:
+                    # If save fails, use the filters anyway
+                    filters = default_filters
+                    print(f"⚠️  Could not save search, but using default filters")
+                
+                if not filters:
+                    error_msg = f"Could not create or load saved search '{SAVED_SEARCH_NAME}'!"
+                    print(f"❌ {error_msg}")
+                    print("\n💡 Available saved searches:")
+                    searches = client.get_saved_searches()
+                    if searches:
+                        for search in searches:
+                            print(f"   - {search['name']}")
+                    else:
+                        print("   (no saved searches found)")
+                    
+                    client.log_daily_sync(
+                        sync_date=sync_date,
+                        announcements_fetched=0,
+                        announcements_new=0,
+                        deals_created=0,
+                        deals_failed=0,
+                        sync_status="error",
+                        error_message=error_msg
+                    )
+                    sys.exit(1)
         
         print(f"✅ Loaded filters: {list(filters.keys())}\n")
         
