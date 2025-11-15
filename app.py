@@ -500,10 +500,6 @@ def main():
     )
     cpv_codes = extract_cpv_codes_from_selection(selected_cpvs)
     
-    # Clear loaded filters after applying them
-    if st.session_state.loaded_filters:
-        st.session_state.loaded_filters = None
-    
     st.sidebar.markdown("---")
     
     # Saved Searches section
@@ -534,6 +530,10 @@ def main():
                     }
                     
                     if st.session_state.client.save_search(st.session_state.current_search_name, current_filters):
+                        # Reload the updated filters to refresh the UI
+                        updated_filters = st.session_state.client.load_search(st.session_state.current_search_name)
+                        if updated_filters:
+                            st.session_state.loaded_filters = updated_filters
                         st.success(f"✅ Updated: {st.session_state.current_search_name}")
                         st.rerun()
                     else:
@@ -604,6 +604,10 @@ def main():
             
             if st.session_state.client.save_search(search_name, current_filters):
                 st.session_state.current_search_name = search_name
+                # Load the saved filters to keep them active
+                saved_filters = st.session_state.client.load_search(search_name)
+                if saved_filters:
+                    st.session_state.loaded_filters = saved_filters
                 st.success(f"✅ Saved: {search_name}")
                 st.rerun()
             else:
