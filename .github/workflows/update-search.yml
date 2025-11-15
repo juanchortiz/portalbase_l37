@@ -1,0 +1,86 @@
+name: Update Saved Search
+
+on:
+  workflow_dispatch:
+    inputs:
+      search_file:
+        description: 'Path to search JSON file (relative to repo root)'
+        required: true
+        default: 'Biogerm_search.json'
+
+jobs:
+  update-search:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Download database from previous run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: base-cache-db
+          path: .
+      
+      - name: Update saved search in database
+        run: |
+          python3 << 'EOF'
+          import sqlite3
+          import json
+          import sys
+          import os
+          
+          search_file = "${{ inputs.search_file }}"
+          
+          if not os.path.exists(search_file):
+              print(f"❌ Search file not found: {search_file}")
+              sys.exit(1)
+          
+          with open(search_file, 'r') as f:
+              search_data = json.load(f)
+          
+          db_path = 'base_cache.db'
+          
+          # Create database if it doesn't exist
+          conn = sqlite3.connect(db_path)
+          cursor = conn.cursor()
+          
+          # Ensure saved_searches table exists
+          cursor.execute("""
+              CREATE TABLE IF NOT EXISTS saved_searches (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT UNIQUE NOT NULL,
+                  filters TEXT NOT NULL,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  last_used TIMESTAMP
+              )
+          """)
+          
+          # Insert or update the search
+          filters_json = json.dumps(search_data['filters'])
+          cursor.execute("""
+              INSERT OR REPLACE INTO saved_searches (name, filters, last_used)
+              VALUES (?, ?, datetime('now'))
+          """, (search_data['name'], filters_json))
+          
+          conn.commit()
+          conn.close()
+          
+          print(f"✅ Updated saved search: {search_data['name']}")
+          print(f"   Filters: {list(search_data['filters'].keys())}")
+          EOF
+      
+      - name: Upload updated database
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-cache-db
+          path: base_cache.db
+          retention-days: 7
+          if-no-files-found: ignore
+

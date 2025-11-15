@@ -1,0 +1,13 @@
+{
+  "name": "Biogerm",
+  "filters": {
+    "keyword": "",
+    "fornecedor_nif": "",
+    "location": [],
+    "cpv_codes": [
+      "33696500-0",
+      "33000000-0",
+      "33600000-6"
+    ]
+  }
+}
