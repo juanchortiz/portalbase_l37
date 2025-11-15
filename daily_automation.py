@@ -58,23 +58,40 @@ def main():
         print(f"📋 Loading saved search: {SAVED_SEARCH_NAME}...")
         filters = client.load_search(SAVED_SEARCH_NAME)
         if not filters:
-            error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found!"
-            print(f"❌ {error_msg}")
-            print("\n💡 Available saved searches:")
-            searches = client.get_saved_searches()
-            for search in searches:
-                print(f"   - {search['name']}")
+            # Try to fallback to "Default Automation" if the specified search doesn't exist
+            print(f"⚠️  Saved search '{SAVED_SEARCH_NAME}' not found!")
+            print("💡 Attempting to use 'Default Automation' as fallback...")
+            filters = client.load_search('Default Automation')
             
-            client.log_daily_sync(
-                sync_date=sync_date,
-                announcements_fetched=0,
-                announcements_new=0,
-                deals_created=0,
-                deals_failed=0,
-                sync_status="error",
-                error_message=error_msg
-            )
-            sys.exit(1)
+            if not filters:
+                error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found, and 'Default Automation' also not found!"
+                print(f"❌ {error_msg}")
+                print("\n💡 Available saved searches:")
+                searches = client.get_saved_searches()
+                if searches:
+                    for search in searches:
+                        print(f"   - {search['name']}")
+                else:
+                    print("   (no saved searches found)")
+                
+                client.log_daily_sync(
+                    sync_date=sync_date,
+                    announcements_fetched=0,
+                    announcements_new=0,
+                    deals_created=0,
+                    deals_failed=0,
+                    sync_status="error",
+                    error_message=error_msg
+                )
+                sys.exit(1)
+            else:
+                print(f"✅ Using 'Default Automation' filters as fallback")
+                # Optionally create the requested search with the same filters
+                try:
+                    client.save_search(SAVED_SEARCH_NAME, filters)
+                    print(f"✅ Created saved search '{SAVED_SEARCH_NAME}' with same filters")
+                except:
+                    pass  # Ignore if save fails (e.g., already exists)
         
         print(f"✅ Loaded filters: {list(filters.keys())}\n")
         
