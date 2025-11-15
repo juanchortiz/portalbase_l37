@@ -93,3 +93,4 @@ def filter_contracts(contracts, filters):
     
     return filtered
 
+
