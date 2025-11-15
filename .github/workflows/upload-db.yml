@@ -1,0 +1,36 @@
+name: Upload Database Manually
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_method:
+        description: 'Upload method'
+        required: true
+        type: choice
+        options:
+          - 'Create empty artifact (first run)'
+          - 'Use existing artifact'
+
+jobs:
+  upload-db:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Create empty database artifact (for first run)
+        if: inputs.upload_method == 'Create empty artifact (first run)'
+        run: |
+          # Create an empty database file
+          touch base_cache.db
+          echo "Empty database created for first run"
+      
+      - name: Upload database artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-cache-db
+          path: base_cache.db
+          retention-days: 30
+          if-no-files-found: ignore
+
