@@ -58,27 +58,61 @@ def main():
         print(f"📋 Loading saved search: {SAVED_SEARCH_NAME}...")
         filters = client.load_search(SAVED_SEARCH_NAME)
         if not filters:
-            error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found!"
-            print(f"❌ {error_msg}")
-            print("\n💡 Available saved searches:")
-            searches = client.get_saved_searches()
-            if searches:
-                for search in searches:
-                    print(f"   - {search['name']}")
-            else:
-                print("   (no saved searches found)")
-            print(f"\n⚠️  Please create and save the search '{SAVED_SEARCH_NAME}' in the Streamlit app first.")
+            # Check if this is the first run (no saved searches exist)
+            all_searches = client.get_saved_searches()
             
-            client.log_daily_sync(
-                sync_date=sync_date,
-                announcements_fetched=0,
-                announcements_new=0,
-                deals_created=0,
-                deals_failed=0,
-                sync_status="error",
-                error_message=error_msg
-            )
-            sys.exit(1)
+            if not all_searches:
+                # First run - create default search to allow automation to start
+                print(f"⚠️  Saved search '{SAVED_SEARCH_NAME}' not found!")
+                print("💡 This appears to be the first run (no saved searches found).")
+                print(f"💡 Creating default '{SAVED_SEARCH_NAME}' search with empty filters.")
+                print("⚠️  IMPORTANT: Please configure this search in the Streamlit app for proper filtering!")
+                
+                # Create search with empty filters (user must configure in app)
+                default_filters = {
+                    "keyword": "",
+                    "fornecedor_nif": "",
+                    "location": [],
+                    "cpv_codes": []
+                }
+                
+                try:
+                    client.save_search(SAVED_SEARCH_NAME, default_filters)
+                    print(f"✅ Created '{SAVED_SEARCH_NAME}' search with empty filters")
+                    print("⚠️  WARNING: This search will match ALL announcements until configured!")
+                    filters = default_filters
+                except Exception as e:
+                    error_msg = f"Failed to create default search: {str(e)}"
+                    print(f"❌ {error_msg}")
+                    client.log_daily_sync(
+                        sync_date=sync_date,
+                        announcements_fetched=0,
+                        announcements_new=0,
+                        deals_created=0,
+                        deals_failed=0,
+                        sync_status="error",
+                        error_message=error_msg
+                    )
+                    sys.exit(1)
+            else:
+                # Other searches exist but not the requested one - fail
+                error_msg = f"Saved search '{SAVED_SEARCH_NAME}' not found!"
+                print(f"❌ {error_msg}")
+                print("\n💡 Available saved searches:")
+                for search in all_searches:
+                    print(f"   - {search['name']}")
+                print(f"\n⚠️  Please create and save the search '{SAVED_SEARCH_NAME}' in the Streamlit app first.")
+                
+                client.log_daily_sync(
+                    sync_date=sync_date,
+                    announcements_fetched=0,
+                    announcements_new=0,
+                    deals_created=0,
+                    deals_failed=0,
+                    sync_status="error",
+                    error_message=error_msg
+                )
+                sys.exit(1)
         
         print(f"✅ Loaded filters: {list(filters.keys())}\n")
         
