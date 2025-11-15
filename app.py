@@ -768,12 +768,12 @@ def main():
                         type_counts[ctype] = type_counts.get(ctype, 0) + 1
                 
                 if type_counts:
-                type_df = pd.DataFrame(
-                    list(type_counts.items()),
-                    columns=['Type', 'Count']
-                ).sort_values('Count', ascending=False)
-                
-                st.bar_chart(type_df.set_index('Type'))
+                    type_df = pd.DataFrame(
+                        list(type_counts.items()),
+                        columns=['Type', 'Count']
+                    ).sort_values('Count', ascending=False)
+                    
+                    st.bar_chart(type_df.set_index('Type'))
                 else:
                     st.info("No contract type data available")
             
@@ -787,17 +787,17 @@ def main():
                         entities = [str(entities)] if entities else []
                     for entity in entities:
                         if entity:  # Skip empty strings
-                        entity_counts[entity] = entity_counts.get(entity, 0) + 1
+                            entity_counts[entity] = entity_counts.get(entity, 0) + 1
                 
                 if entity_counts:
-                top_entities = sorted(
-                    entity_counts.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:10]
-                
-                entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
-                st.dataframe(entity_df, use_container_width=True, hide_index=True)
+                    top_entities = sorted(
+                        entity_counts.items(),
+                        key=lambda x: x[1],
+                        reverse=True
+                    )[:10]
+                    
+                    entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
+                    st.dataframe(entity_df, use_container_width=True, hide_index=True)
                 else:
                     st.info("No entity data available")
             
@@ -926,18 +926,18 @@ def main():
     else:
         # Only show sample table if no search has been performed yet
         if not st.session_state.search_performed:
-        # Welcome message
-        st.info("👈 Use the filters in the sidebar to search for contracts")
-        
-        # Quick stats
-        stats = st.session_state.client.get_cache_stats()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Contracts in Cache", f"{stats['total_contracts']:,}")
-        with col2:
-            st.metric("Total Announcements in Cache", f"{stats['total_announcements']:,}")
-        
+            # Welcome message
+            st.info("👈 Use the filters in the sidebar to search for contracts")
+            
+            # Quick stats
+            stats = st.session_state.client.get_cache_stats()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total Contracts in Cache", f"{stats['total_contracts']:,}")
+            with col2:
+                st.metric("Total Announcements in Cache", f"{stats['total_announcements']:,}")
+            
             # Show recent contracts sample
             st.markdown("### 📋 Recent Contracts Sample")
             st.markdown("*Showing a preview of recent contracts. Use filters to search for specific contracts.*")
