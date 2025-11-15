@@ -79,12 +79,12 @@ def filter_contracts(contracts, filters):
             c for c in filtered
             if (
                 # Contract CPV matching
-                (c.get('cpv') and any(
+                (c.get('cpv') and isinstance(c.get('cpv'), list) and len(c.get('cpv', [])) > 0 and any(
                     any(cpv_filter.split('-')[0] in str(cpv_item) for cpv_filter in cpv_list)
                     for cpv_item in c.get('cpv', [])
                 )) or 
                 # Announcement CPV matching (capital CPVs)
-                (c.get('CPVs') and any(
+                (c.get('CPVs') and isinstance(c.get('CPVs'), list) and len(c.get('CPVs', [])) > 0 and any(
                     any(cpv_filter.split('-')[0] in str(cpv_item) for cpv_filter in cpv_list)
                     for cpv_item in c.get('CPVs', [])
                 ))
