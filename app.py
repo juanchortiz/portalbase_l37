@@ -356,7 +356,12 @@ def main():
     # Sidebar - Filters
     st.sidebar.header("🔍 Filtros")
     
-    # Date range selection
+    # Check if we have loaded filters FIRST (before rendering UI)
+    loaded = st.session_state.loaded_filters
+    if loaded and loaded.get('search_type'):
+        # Update search type if loaded from saved search
+        st.session_state.search_type = loaded.get('search_type', 'contracts')
+    
     # Search Type Selection (Contracts or Open Procedures)
     st.sidebar.subheader("Tipo de Busca")
     search_type = st.sidebar.radio(
@@ -376,12 +381,6 @@ def main():
     if stats['years_cached']:
         last_update = stats['years_cached'][0]['last_fetched'][:10] if stats['years_cached'] else 'Unknown'
         st.sidebar.caption(f"📅 Cache last updated: {last_update}")
-    
-    # Check if we have loaded filters
-    loaded = st.session_state.loaded_filters
-    if loaded and loaded.get('search_type'):
-        # Update search type if loaded from saved search
-        st.session_state.search_type = loaded.get('search_type', 'contracts')
     
     date_options = ["Last 30 days", "Last 90 days", "Custom range", "Today", "Yesterday"]
     default_date_idx = 0
