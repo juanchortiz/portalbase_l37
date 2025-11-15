@@ -137,6 +137,12 @@ if 'search_performed' not in st.session_state:
 if 'loaded_filters' not in st.session_state:
     st.session_state.loaded_filters = None
 
+if 'current_search_name' not in st.session_state:
+    st.session_state.current_search_name = None
+
+if 'search_type' not in st.session_state:
+    st.session_state.search_type = 'contracts'  # 'contracts' or 'announcements'
+
 
 def format_price(price_str):
     """Convert Portuguese price format to float."""
@@ -351,6 +357,18 @@ def main():
     st.sidebar.header("🔍 Filtros")
     
     # Date range selection
+    # Search Type Selection (Contracts or Open Procedures)
+    st.sidebar.subheader("Tipo de Busca")
+    search_type = st.sidebar.radio(
+        "Buscar:",
+        ["📋 Contratos", "📢 Procedimentos Abertos"],
+        index=0 if st.session_state.search_type == 'contracts' else 1,
+        help="Escolha entre buscar contratos celebrados ou procedimentos abertos (anúncios)"
+    )
+    st.session_state.search_type = 'contracts' if search_type == "📋 Contratos" else 'announcements'
+    
+    st.sidebar.markdown("---")
+    
     st.sidebar.subheader("Datas")
     
     # Show cache info
@@ -361,6 +379,9 @@ def main():
     
     # Check if we have loaded filters
     loaded = st.session_state.loaded_filters
+    if loaded and loaded.get('search_type'):
+        # Update search type if loaded from saved search
+        st.session_state.search_type = loaded.get('search_type', 'contracts')
     
     date_options = ["Last 30 days", "Last 90 days", "Custom range", "Today", "Yesterday"]
     default_date_idx = 0
@@ -494,6 +515,36 @@ def main():
             st.error(f"Error loading saved searches: {str(e)}")
             saved_searches = []
         
+        # Show current loaded search
+        if st.session_state.current_search_name:
+            st.info(f"📂 Loaded: **{st.session_state.current_search_name}**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Update Search", use_container_width=True, help="Update the loaded search with current filters"):
+                    # Collect current filters
+                    current_filters = {
+                        'search_type': st.session_state.search_type,
+                        'date_option': date_option,
+                        'start_date': start_date.isoformat() if date_option == "Custom range" else None,
+                        'end_date': end_date.isoformat() if date_option == "Custom range" else None,
+                        'keyword': keyword,
+                        'fornecedor_nif': fornecedor_nif,
+                        'location': location,
+                        'cpv_codes': selected_cpvs
+                    }
+                    
+                    if st.session_state.client.save_search(st.session_state.current_search_name, current_filters):
+                        st.success(f"✅ Updated: {st.session_state.current_search_name}")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Failed to update")
+            with col2:
+                if st.button("❌ Clear", use_container_width=True, help="Clear loaded search"):
+                    st.session_state.current_search_name = None
+                    st.session_state.loaded_filters = None
+                    st.rerun()
+            st.markdown("---")
+        
         # Load saved search
         if saved_searches:
             st.markdown("**Load a saved search:**")
@@ -511,11 +562,18 @@ def main():
                     if loaded_filters:
                         # Store loaded filters to apply them
                         st.session_state.loaded_filters = loaded_filters
+                        st.session_state.current_search_name = selected_search
+                        # Update search type if saved in search
+                        if loaded_filters.get('search_type'):
+                            st.session_state.search_type = loaded_filters.get('search_type', 'contracts')
                         st.success(f"Loaded: {selected_search}")
                         st.rerun()
             with col2:
                 if st.button("🗑️ Delete", disabled=not selected_search, use_container_width=True):
                     if st.session_state.client.delete_search(selected_search):
+                        if st.session_state.current_search_name == selected_search:
+                            st.session_state.current_search_name = None
+                            st.session_state.loaded_filters = None
                         st.success(f"Deleted: {selected_search}")
                         st.rerun()
         else:
@@ -528,11 +586,13 @@ def main():
         search_name = st.text_input(
             "Search name:",
             placeholder="e.g., Lab Equipment Porto",
+            value=st.session_state.current_search_name if st.session_state.current_search_name else "",
             label_visibility="collapsed"
         )
         if st.button("💾 Save Search", use_container_width=True, disabled=not search_name):
             # Collect current filters
             current_filters = {
+                'search_type': st.session_state.search_type,
                 'date_option': date_option,
                 'start_date': start_date.isoformat() if date_option == "Custom range" else None,
                 'end_date': end_date.isoformat() if date_option == "Custom range" else None,
@@ -543,6 +603,7 @@ def main():
             }
             
             if st.session_state.client.save_search(search_name, current_filters):
+                st.session_state.current_search_name = search_name
                 st.success(f"✅ Saved: {search_name}")
                 st.rerun()
             else:
@@ -567,27 +628,39 @@ def main():
     # Main content area
     if search_button:
         st.session_state.search_performed = True  # Mark that a search has been performed
-        with st.spinner('Searching contracts...'):
+        search_type_label = "contracts" if st.session_state.search_type == 'contracts' else "open procedures"
+        with st.spinner(f'Searching {search_type_label}...'):
             # Convert dates to Portuguese format
             start_str = start_date.strftime("%d/%m/%Y")
             end_str = end_date.strftime("%d/%m/%Y")
             
-            # Get contracts
-            if start_date == end_date:
-                contracts = st.session_state.client.get_contracts_by_date(start_str)
-                announcements = st.session_state.client.get_announcements_by_date(start_str)
+            # Get data based on search type
+            if st.session_state.search_type == 'contracts':
+                # Get contracts only
+                if start_date == end_date:
+                    contracts = st.session_state.client.get_contracts_by_date(start_str)
+                    announcements = []
+                else:
+                    contracts = st.session_state.client.get_contracts_by_date_range(start_str, end_str)
+                    announcements = []
             else:
-                contracts = st.session_state.client.get_contracts_by_date_range(start_str, end_str)
-                # Get announcements for the same range
-                announcements = []
-                current_date = start_date
-                while current_date <= end_date:
-                    date_str = current_date.strftime("%d/%m/%Y")
-                    announcements.extend(st.session_state.client.get_announcements_by_date(date_str))
-                    current_date += timedelta(days=1)
+                # Get announcements (open procedures) only
+                contracts = []
+                if start_date == end_date:
+                    announcements = st.session_state.client.get_announcements_by_date(start_str)
+                else:
+                    announcements = []
+                    current_date = start_date
+                    while current_date <= end_date:
+                        date_str = current_date.strftime("%d/%m/%Y")
+                        announcements.extend(st.session_state.client.get_announcements_by_date(date_str))
+                        current_date += timedelta(days=1)
             
             # Debug: Show initial results
-            st.info(f"📊 Found {len(contracts)} contracts and {len(announcements)} open procedures in date range")
+            if st.session_state.search_type == 'contracts':
+                st.info(f"📊 Found {len(contracts)} contracts in date range")
+            else:
+                st.info(f"📊 Found {len(announcements)} open procedures in date range")
             
             # Apply filters
             filters = {
@@ -613,57 +686,70 @@ def main():
             if active_filters:
                 st.info(f"🔍 Active filters: {', '.join(active_filters)}")
             
-            filtered = filter_contracts(contracts, filters)
-            filtered_announcements = filter_contracts(announcements, filters)  # Uses same filter logic
-            
-            st.session_state.filtered_contracts = filtered
-            st.session_state.filtered_announcements = filtered_announcements
+            # Filter based on search type
+            if st.session_state.search_type == 'contracts':
+                filtered = filter_contracts(contracts, filters)
+                st.session_state.filtered_contracts = filtered
+                st.session_state.filtered_announcements = []
+            else:
+                filtered_announcements = filter_contracts(announcements, filters)
+                st.session_state.filtered_announcements = filtered_announcements
+                st.session_state.filtered_contracts = []
             
             # Debug: Show filtered results
-            if filtered:
-                st.success(f"✅ {len(filtered)} contracts match your filters")
+            if st.session_state.search_type == 'contracts':
+                if filtered:
+                    st.success(f"✅ {len(filtered)} contracts match your filters")
+                else:
+                    st.warning(f"⚠️ No contracts found matching your filters. Try adjusting them.")
             else:
-                st.warning(f"⚠️ No contracts found matching your filters. Try adjusting them.")
+                if filtered_announcements:
+                    st.success(f"✅ {len(filtered_announcements)} open procedures match your filters")
+                else:
+                    st.warning(f"⚠️ No open procedures found matching your filters. Try adjusting them.")
     
     # Display results
-    if st.session_state.filtered_contracts:
-        contracts = st.session_state.filtered_contracts
-        
-        # Toggle for Data Highlights
-        show_highlights = st.checkbox("📊 Show Data Highlights", value=True)
-        
-        if show_highlights:
-            # Summary metrics
-            col1, col2, col3, col4 = st.columns(4)
+    if st.session_state.filtered_contracts or st.session_state.filtered_announcements:
+        # Determine which type of results to show
+        if st.session_state.search_type == 'contracts' and st.session_state.filtered_contracts:
+            contracts = st.session_state.filtered_contracts
+            announcements = []
             
-            total_value = sum(format_price(c.get('precoContratual', '0')) for c in contracts)
+            # Toggle for Data Highlights
+            show_highlights = st.checkbox("📊 Show Data Highlights", value=True)
             
-            with col1:
-                st.metric("Total Contracts", len(contracts))
-            with col2:
-                st.metric("Total Value", f"€{total_value:,.2f}")
-            with col3:
-                avg_value = total_value / len(contracts) if contracts else 0
-                st.metric("Average Value", f"€{avg_value:,.2f}")
-            with col4:
-                unique_entities = len(set(
-                    entity
-                    for c in contracts
-                    for entity in c.get('adjudicante', [])
-                ))
-                st.metric("Unique Entities", unique_entities)
-        
-        st.markdown("---")
-        
-        # Tabs for different views
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 Contratos", "📢 Procedimentos Abertos", "📈 Analytics", "📄 Detailed View"])
-        
-        with tab1:
-            # Convert to DataFrame
-            df = contracts_to_dataframe(contracts)
+            if show_highlights:
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                
+                total_value = sum(format_price(c.get('precoContratual', '0')) for c in contracts)
+                
+                with col1:
+                    st.metric("Total Contracts", len(contracts))
+                with col2:
+                    st.metric("Total Value", f"€{total_value:,.2f}")
+                with col3:
+                    avg_value = total_value / len(contracts) if contracts else 0
+                    st.metric("Average Value", f"€{avg_value:,.2f}")
+                with col4:
+                    unique_entities = len(set(
+                        entity
+                        for c in contracts
+                        for entity in (c.get('adjudicante', []) if isinstance(c.get('adjudicante'), list) else [])
+                    ))
+                    st.metric("Unique Entities", unique_entities)
             
-            # Display table with clickable links
-            st.dataframe(
+            st.markdown("---")
+            
+            # Tabs for different views
+            tab1, tab2, tab3, tab4 = st.tabs(["📋 Contratos", "📢 Procedimentos Abertos", "📈 Analytics", "📄 Detailed View"])
+            
+            with tab1:
+                # Convert to DataFrame
+                df = contracts_to_dataframe(contracts)
+                
+                # Display table with clickable links
+                st.dataframe(
                 df,
                 use_container_width=True,
                 height=600,
@@ -690,71 +776,69 @@ def main():
                 mime="text/csv"
             )
         
-        with tab2:
-            # Announcements/Open Procedures Tab
-            announcements = st.session_state.filtered_announcements
+            with tab2:
+                # Announcements/Open Procedures Tab (for contracts view - shows empty if searching contracts)
+                if announcements:
+                    st.subheader(f"📢 {len(announcements)} Open Procedures Found")
+                    
+                    # Convert to DataFrame and display
+                    df_announcements = announcements_to_dataframe(announcements)
+                    
+                    # Display the table with clickable links
+                    st.dataframe(
+                        df_announcements,
+                        use_container_width=True,
+                        height=600,
+                        column_config={
+                            "View": st.column_config.LinkColumn(
+                                "🔗 Ver",
+                                help="Click to view announcement on Base.gov.pt",
+                                display_text="Ver"
+                            ),
+                            "Docs": st.column_config.LinkColumn(
+                                "📄 Docs",
+                                help="Click to download procedure documents",
+                                display_text="Docs"
+                            ),
+                            "Preço Base (€)": st.column_config.NumberColumn(
+                                "Preço Base (€)",
+                                format="€%.2f"
+                            )
+                        },
+                        hide_index=True,
+                    )
+                    
+                    # Download button
+                    csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download as CSV",
+                        data=csv_announcements,
+                        file_name=f"announcements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                    )
+                    
+                    # Summary statistics
+                    st.markdown("---")
+                    st.subheader("📊 Procedure Statistics")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        total_base_price = sum(format_price(a.get('PrecoBase', '0')) for a in announcements)
+                        st.metric("Total Base Price", f"€{total_base_price:,.2f}")
+                    
+                    with col2:
+                        unique_entities = len(set(a.get('designacaoEntidade', 'N/A') for a in announcements))
+                        st.metric("Unique Entities", unique_entities)
+                    
+                    with col3:
+                        avg_base_price = total_base_price / len(announcements) if announcements else 0
+                        st.metric("Average Base Price", f"€{avg_base_price:,.2f}")
+                else:
+                    st.info("No open procedures found. Try adjusting your search filters or date range.")
             
-            if announcements:
-                st.subheader(f"📢 {len(announcements)} Open Procedures Found")
-                
-                # Convert to DataFrame and display
-                df_announcements = announcements_to_dataframe(announcements)
-                
-                # Display the table with clickable links
-                st.dataframe(
-                    df_announcements,
-                    use_container_width=True,
-                    height=600,
-                    column_config={
-                        "View": st.column_config.LinkColumn(
-                            "🔗 Ver",
-                            help="Click to view announcement on Base.gov.pt",
-                            display_text="Ver"
-                        ),
-                        "Docs": st.column_config.LinkColumn(
-                            "📄 Docs",
-                            help="Click to download procedure documents",
-                            display_text="Docs"
-                        ),
-                        "Preço Base (€)": st.column_config.NumberColumn(
-                            "Preço Base (€)",
-                            format="€%.2f"
-                        )
-                    },
-                    hide_index=True,
-                )
-                
-                # Download button
-                csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download as CSV",
-                    data=csv_announcements,
-                    file_name=f"announcements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv",
-                )
-                
-                # Summary statistics
-                st.markdown("---")
-                st.subheader("📊 Procedure Statistics")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    total_base_price = sum(format_price(a.get('PrecoBase', '0')) for a in announcements)
-                    st.metric("Total Base Price", f"€{total_base_price:,.2f}")
-                
-                with col2:
-                    unique_entities = len(set(a.get('designacaoEntidade', 'N/A') for a in announcements))
-                    st.metric("Unique Entities", unique_entities)
-                
-                with col3:
-                    avg_base_price = total_base_price / len(announcements) if announcements else 0
-                    st.metric("Average Base Price", f"€{avg_base_price:,.2f}")
-            else:
-                st.info("No open procedures found. Try adjusting your search filters or date range.")
-        
-        with tab3:
-            col1, col2 = st.columns(2)
+            with tab3:
+                col1, col2 = st.columns(2)
             
             with col1:
                 # Contract types distribution
@@ -801,24 +885,24 @@ def main():
                 else:
                     st.info("No entity data available")
             
-            # Price distribution
-            st.subheader("Price Distribution")
-            prices = [format_price(c.get('precoContratual', '0')) for c in contracts]
-            prices = [p for p in prices if p > 0]  # Remove zero prices
-            
-            if prices:
-                price_df = pd.DataFrame({'Price (€)': prices})
-                st.bar_chart(price_df['Price (€)'])
+                # Price distribution
+                st.subheader("Price Distribution")
+                prices = [format_price(c.get('precoContratual', '0')) for c in contracts]
+                prices = [p for p in prices if p > 0]  # Remove zero prices
                 
-                st.write(f"**Min Price:** €{min(prices):,.2f}")
-                st.write(f"**Max Price:** €{max(prices):,.2f}")
-                st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
-            else:
-                st.info("No price data available")
-        
-        with tab4:
-            # Detailed view of each contract
-            st.subheader("Contract Details")
+                if prices:
+                    price_df = pd.DataFrame({'Price (€)': prices})
+                    st.bar_chart(price_df['Price (€)'])
+                    
+                    st.write(f"**Min Price:** €{min(prices):,.2f}")
+                    st.write(f"**Max Price:** €{max(prices):,.2f}")
+                    st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
+                else:
+                    st.info("No price data available")
+            
+            with tab4:
+                # Detailed view of each contract
+                st.subheader("Contract Details")
             
             # Pagination
             items_per_page = 10
@@ -922,6 +1006,82 @@ def main():
                     if contract.get('objectoContrato'):
                         st.markdown("**🎯 Contract Object**")
                         st.success(contract.get('objectoContrato'))
+        
+        elif st.session_state.search_type == 'announcements' and st.session_state.filtered_announcements:
+            # Show only announcements (open procedures)
+            announcements = st.session_state.filtered_announcements
+            
+            # Toggle for Data Highlights
+            show_highlights = st.checkbox("📊 Show Data Highlights", value=True)
+            
+            if show_highlights:
+                # Summary metrics for announcements
+                col1, col2, col3, col4 = st.columns(4)
+                
+                total_base_price = sum(float(a.get('PrecoBase', 0) or 0) for a in announcements)
+                
+                with col1:
+                    st.metric("Total Open Procedures", len(announcements))
+                with col2:
+                    st.metric("Total Base Price", f"€{total_base_price:,.2f}")
+                with col3:
+                    avg_price = total_base_price / len(announcements) if announcements else 0
+                    st.metric("Average Base Price", f"€{avg_price:,.2f}")
+                with col4:
+                    unique_entities = len(set(
+                        a.get('nifEntidade', '') for a in announcements if a.get('nifEntidade')
+                    ))
+                    st.metric("Unique Entities", unique_entities)
+            
+            st.markdown("---")
+            
+            # Tabs for announcements view
+            tab1, tab2, tab3 = st.tabs(["📢 Procedimentos Abertos", "📈 Analytics", "📄 Detailed View"])
+            
+            with tab1:
+                # Convert to DataFrame and display
+                df_announcements = announcements_to_dataframe(announcements)
+                
+                # Display the table with clickable links
+                st.dataframe(
+                    df_announcements,
+                    use_container_width=True,
+                    height=600,
+                    column_config={
+                        "View": st.column_config.LinkColumn(
+                            "🔗 Ver",
+                            help="Click to view announcement on Base.gov.pt",
+                            display_text="Ver"
+                        ),
+                        "Docs": st.column_config.LinkColumn(
+                            "📄 Docs",
+                            help="Click to download procedure documents",
+                            display_text="Docs"
+                        ),
+                        "Preço Base (€)": st.column_config.NumberColumn(
+                            "Preço Base (€)",
+                            format="€%.2f"
+                        )
+                    },
+                    hide_index=True,
+                )
+                
+                # Download button
+                csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download as CSV",
+                    data=csv_announcements,
+                    file_name=f"announcements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                )
+            
+            with tab2:
+                st.subheader("📊 Announcement Analytics")
+                st.info("Analytics for announcements coming soon!")
+            
+            with tab3:
+                st.subheader("📄 Announcement Details")
+                st.info("Detailed view for announcements coming soon!")
     
     else:
         # Only show sample table if no search has been performed yet
