@@ -114,7 +114,14 @@ def main():
                 )
                 sys.exit(1)
         
-        print(f"✅ Loaded filters: {list(filters.keys())}\n")
+        print(f"✅ Loaded filters: {list(filters.keys())}")
+        print(f"📋 Filter details:")
+        print(f"   - Keywords: '{filters.get('keyword', '')}'")
+        print(f"   - Fornecedor NIF: '{filters.get('fornecedor_nif', '')}'")
+        print(f"   - Locations: {filters.get('location', [])}")
+        print(f"   - CPV Codes: {filters.get('cpv_codes', [])}")
+        print(f"   - Search Type: {filters.get('search_type', 'not set')}")
+        print()
         
         # Sync new announcements
         print("📥 Syncing new announcements from API...")
@@ -203,8 +210,45 @@ def main():
         
         # Apply saved search filters
         print("🔍 Applying saved search filters...")
-        filtered_announcements = filter_contracts(new_announcements, filters)
-        print(f"✅ {len(filtered_announcements)} announcements match filter criteria\n")
+        print(f"   - Total new announcements before filtering: {len(new_announcements)}")
+        
+        # Ensure filters have all required keys
+        filter_dict = {
+            'keyword': filters.get('keyword', ''),
+            'fornecedor_nif': filters.get('fornecedor_nif', ''),
+            'location': filters.get('location', []),
+            'cpv_codes': filters.get('cpv_codes', [])
+        }
+        
+        # Debug: Check CPV structure in first few announcements
+        if new_announcements and filter_dict.get('cpv_codes'):
+            print(f"   🔍 Debug: Checking CPV structure in announcements...")
+            sample = new_announcements[:3]
+            for ann in sample:
+                cpvs = ann.get('CPVs', [])
+                print(f"      - Announcement {ann.get('nAnuncio', 'N/A')}: CPVs = {cpvs} (type: {type(cpvs)})")
+        
+        filtered_announcements = filter_contracts(new_announcements, filter_dict)
+        print(f"✅ {len(filtered_announcements)} announcements match filter criteria")
+        
+        if len(filtered_announcements) != len(new_announcements):
+            print(f"   ✅ Filtered out {len(new_announcements) - len(filtered_announcements)} announcements")
+        else:
+            print(f"   ⚠️  WARNING: All announcements passed filters!")
+            if not filter_dict.get('cpv_codes') and not filter_dict.get('keyword') and not filter_dict.get('fornecedor_nif'):
+                print(f"   ⚠️  All filters are empty - this will match ALL announcements!")
+            elif filter_dict.get('cpv_codes'):
+                print(f"   ⚠️  CPV filter is set but all announcements passed - check CPV matching logic!")
+                # Show sample of CPVs from announcements
+                if new_announcements:
+                    sample_cpvs = []
+                    for ann in new_announcements[:5]:
+                        cpvs = ann.get('CPVs', [])
+                        if cpvs:
+                            sample_cpvs.extend(cpvs if isinstance(cpvs, list) else [cpvs])
+                    if sample_cpvs:
+                        print(f"   📋 Sample CPVs from announcements: {sample_cpvs[:10]}")
+        print()
         
         # Create HubSpot deals
         deals_created = 0
