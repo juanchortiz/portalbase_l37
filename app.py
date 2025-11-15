@@ -633,25 +633,25 @@ def main():
         show_highlights = st.checkbox("📊 Show Data Highlights", value=True)
         
         if show_highlights:
-        # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
-        
-        total_value = sum(format_price(c.get('precoContratual', '0')) for c in contracts)
-        
-        with col1:
-            st.metric("Total Contracts", len(contracts))
-        with col2:
-            st.metric("Total Value", f"€{total_value:,.2f}")
-        with col3:
-            avg_value = total_value / len(contracts) if contracts else 0
-            st.metric("Average Value", f"€{avg_value:,.2f}")
-        with col4:
-            unique_entities = len(set(
-                entity
-                for c in contracts
-                for entity in c.get('adjudicante', [])
-            ))
-            st.metric("Unique Entities", unique_entities)
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            
+            total_value = sum(format_price(c.get('precoContratual', '0')) for c in contracts)
+            
+            with col1:
+                st.metric("Total Contracts", len(contracts))
+            with col2:
+                st.metric("Total Value", f"€{total_value:,.2f}")
+            with col3:
+                avg_value = total_value / len(contracts) if contracts else 0
+                st.metric("Average Value", f"€{avg_value:,.2f}")
+            with col4:
+                unique_entities = len(set(
+                    entity
+                    for c in contracts
+                    for entity in c.get('adjudicante', [])
+                ))
+                st.metric("Unique Entities", unique_entities)
         
         st.markdown("---")
         
