@@ -5,6 +5,20 @@ on:
     # Run daily at 5:30 PM UTC (6:30 PM Portugal time, after Base.gov.pt publishes)
     - cron: '30 17 * * *'
   workflow_dispatch:  # Allow manual trigger
+    inputs:
+      START_DATE:
+        description: 'Override start date (DD/MM/YYYY or YYYY-MM-DD)'
+        required: false
+        type: string
+      END_DATE:
+        description: 'Override end date (DD/MM/YYYY or YYYY-MM-DD)'
+        required: false
+        type: string
+      DAYS_TO_CHECK:
+        description: 'Number of days to check (ignored if START/END provided)'
+        required: false
+        default: '1'
+        type: string
 
 jobs:
   sync-and-create-deals:
@@ -89,7 +103,9 @@ jobs:
           BASE_API_KEY: ${{ secrets.BASE_API_KEY }}
           HUBSPOT_API_TOKEN: ${{ secrets.HUBSPOT_BIOGERM_API_TOKEN }}
           AUTOMATION_SAVED_SEARCH: ${{ secrets.AUTOMATION_SAVED_SEARCH || 'Biogerm' }}
-          DAYS_TO_CHECK: ${{ secrets.DAYS_TO_CHECK || '1' }}
+          DAYS_TO_CHECK: ${{ inputs.DAYS_TO_CHECK || secrets.DAYS_TO_CHECK || '1' }}
+          START_DATE: ${{ inputs.START_DATE }}
+          END_DATE: ${{ inputs.END_DATE }}
         run: |
           python daily_automation.py
       
