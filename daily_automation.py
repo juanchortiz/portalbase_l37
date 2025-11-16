@@ -223,11 +223,20 @@ def main():
                     new_announcements.append(announcement)
         
         print(f"✅ Fetched {announcements_fetched} announcements from API")
-        print(f"✅ Found {len(new_announcements)} new announcements in date range\n")
+        print(f"✅ Found {len(new_announcements)} new announcements in date range")
+
+        # Build full candidate set in date range (including already cached ones)
+        candidates_in_range = []
+        for announcement in all_fetched_announcements:
+            pub_date = announcement.get('dataPublicacao', '')
+            pub_cmp = convert_date(pub_date) if pub_date else None
+            if pub_cmp and (start_comparable <= pub_cmp <= end_comparable):
+                candidates_in_range.append(announcement)
+        print(f"ℹ️  Total announcements in date range (new + existing): {len(candidates_in_range)}\n")
         
         # Apply saved search filters
         print("🔍 Applying saved search filters...")
-        print(f"   - Total new announcements before filtering: {len(new_announcements)}")
+        print(f"   - Total candidates before filtering: {len(candidates_in_range)} (new: {len(new_announcements)})")
         
         # Ensure filters have all required keys
         filter_dict = {
@@ -238,33 +247,20 @@ def main():
         }
         
         # Debug: Check CPV structure in first few announcements
-        if new_announcements and filter_dict.get('cpv_codes'):
+        if candidates_in_range and filter_dict.get('cpv_codes'):
             print(f"   🔍 Debug: Checking CPV structure in announcements...")
-            sample = new_announcements[:3]
+            sample = candidates_in_range[:3]
             for ann in sample:
                 cpvs = ann.get('CPVs', [])
                 print(f"      - Announcement {ann.get('nAnuncio', 'N/A')}: CPVs = {cpvs} (type: {type(cpvs)})")
         
-        filtered_announcements = filter_contracts(new_announcements, filter_dict)
+        # Filter all candidates (not just newly stored)
+        filtered_announcements = filter_contracts(candidates_in_range, filter_dict)
         print(f"✅ {len(filtered_announcements)} announcements match filter criteria")
-        
-        if len(filtered_announcements) != len(new_announcements):
-            print(f"   ✅ Filtered out {len(new_announcements) - len(filtered_announcements)} announcements")
-        else:
-            print(f"   ⚠️  WARNING: All announcements passed filters!")
-            if not filter_dict.get('cpv_codes') and not filter_dict.get('keyword') and not filter_dict.get('fornecedor_nif'):
-                print(f"   ⚠️  All filters are empty - this will match ALL announcements!")
-            elif filter_dict.get('cpv_codes'):
-                print(f"   ⚠️  CPV filter is set but all announcements passed - check CPV matching logic!")
-                # Show sample of CPVs from announcements
-                if new_announcements:
-                    sample_cpvs = []
-                    for ann in new_announcements[:5]:
-                        cpvs = ann.get('CPVs', [])
-                        if cpvs:
-                            sample_cpvs.extend(cpvs if isinstance(cpvs, list) else [cpvs])
-                    if sample_cpvs:
-                        print(f"   📋 Sample CPVs from announcements: {sample_cpvs[:10]}")
+
+        if candidates_in_range:
+            filtered_out = len(candidates_in_range) - len(filtered_announcements)
+            print(f"   ℹ️  Filtered out {filtered_out} announcements")
         print()
         
         # Create HubSpot deals
