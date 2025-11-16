@@ -155,33 +155,47 @@ def main():
             except Exception as e:
                 print(f"⚠️  Error fetching year {year}: {e}")
         
-        # Filter by date range and get only new ones
-        def convert_date(date_str):
-            """Convert DD/MM/YYYY to YYYY-MM-DD"""
-            if not date_str:
+        # Robust date parsing and comparison
+        from datetime import datetime as _dt, date as _date
+        def _parse_any_date(s: str) -> _date | None:
+            if not s:
                 return None
-            parts = date_str.split('/')
-            if len(parts) != 3:
+            s = str(s).strip()
+            # Try DD/MM/YYYY
+            try:
+                return _dt.strptime(s, "%d/%m/%Y").date()
+            except Exception:
+                pass
+            # Try YYYY-MM-DD
+            try:
+                return _dt.strptime(s, "%Y-%m-%d").date()
+            except Exception:
                 return None
-            return f"{parts[2]}-{parts[1]}-{parts[0]}"
-        
-        start_comparable = convert_date(start_date_str)
-        end_comparable = convert_date(end_date_str)
+
+        def _get_announcement_pub_date(a: dict) -> _date | None:
+            for key in ("dataPublicacao", "DataPublicacao", "data_publicacao", "DataPublicacaoAnuncio", "dataPublicacaoTexto", "Data"):
+                if key in a and a.get(key):
+                    d = _parse_any_date(a.get(key))
+                    if d:
+                        return d
+            return None
+
+        start_date_obj = _dt.strptime(start_date_str, "%d/%m/%Y").date()
+        end_date_obj = _dt.strptime(end_date_str, "%d/%m/%Y").date()
         
         new_announcements = []
         announcements_fetched = len(all_fetched_announcements)
         
+        parsed_ok = 0
+        parsed_fail = 0
         for announcement in all_fetched_announcements:
-            pub_date = announcement.get('dataPublicacao', '')
+            pub_date = _get_announcement_pub_date(announcement)
             if not pub_date:
+                parsed_fail += 1
                 continue
-            
-            pub_comparable = convert_date(pub_date)
-            if not pub_comparable:
-                continue
-            
+            parsed_ok += 1
             # Check if within date range
-            if start_comparable <= pub_comparable <= end_comparable:
+            if start_date_obj <= pub_date <= end_date_obj:
                 n_anuncio = announcement.get('nAnuncio')
                 if not n_anuncio:
                     continue
@@ -223,14 +237,14 @@ def main():
                     new_announcements.append(announcement)
         
         print(f"✅ Fetched {announcements_fetched} announcements from API")
+        print(f"ℹ️  Parsed dates OK: {parsed_ok}, skipped (no/invalid date): {parsed_fail}")
         print(f"✅ Found {len(new_announcements)} new announcements in date range")
 
         # Build full candidate set in date range (including already cached ones)
         candidates_in_range = []
         for announcement in all_fetched_announcements:
-            pub_date = announcement.get('dataPublicacao', '')
-            pub_cmp = convert_date(pub_date) if pub_date else None
-            if pub_cmp and (start_comparable <= pub_cmp <= end_comparable):
+            pub_date = _get_announcement_pub_date(announcement)
+            if pub_date and (start_date_obj <= pub_date <= end_date_obj):
                 candidates_in_range.append(announcement)
         print(f"ℹ️  Total announcements in date range (new + existing): {len(candidates_in_range)}\n")
         
