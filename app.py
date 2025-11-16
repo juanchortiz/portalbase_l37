@@ -568,10 +568,19 @@ def main():
     st.sidebar.subheader("CPV Classification")
     cpv_options = get_cpv_display_options()
     default_cpvs = loaded.get('cpv_codes', []) if loaded else []
+    # Map saved codes to display strings used by the multiselect; skip if not present
+    try:
+        default_cpvs_display = [
+            f"{code} - {CPV_CODES.get(code, 'Unknown')}"
+            for code in default_cpvs
+            if f"{code} - {CPV_CODES.get(code, 'Unknown')}" in cpv_options
+        ]
+    except Exception:
+        default_cpvs_display = []
     selected_cpvs = st.sidebar.multiselect(
         "Select CPV Categories:",
         options=cpv_options,
-        default=default_cpvs,
+        default=default_cpvs_display,
         help="Select one or more CPV categories. Use the search to find specific categories.",
         placeholder="Search and select CPV codes..."
     )
