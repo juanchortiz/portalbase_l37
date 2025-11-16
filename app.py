@@ -10,6 +10,10 @@ from datetime import datetime, timedelta
 from cached_api_client import CachedBaseAPIClient
 from config import get_api_key
 import json
+import os
+
+# FAST BOOT: skip heavy startup work on cloud to satisfy health checks
+FAST_BOOT = os.environ.get("FAST_BOOT", "1") == "1"
 
 # CPV Codes Dictionary - Portuguese Healthcare and Laboratory Focus
 CPV_CODES = {
@@ -377,10 +381,11 @@ def main():
     st.sidebar.subheader("Datas")
     
     # Show cache info
-    stats = st.session_state.client.get_cache_stats()
-    if stats['years_cached']:
-        last_update = stats['years_cached'][0]['last_fetched'][:10] if stats['years_cached'] else 'Unknown'
-        st.sidebar.caption(f"📅 Cache last updated: {last_update}")
+    if not FAST_BOOT:
+        stats = st.session_state.client.get_cache_stats()
+        if stats['years_cached']:
+            last_update = stats['years_cached'][0]['last_fetched'][:10] if stats['years_cached'] else 'Unknown'
+            st.sidebar.caption(f"📅 Cache last updated: {last_update}")
     
     date_options = ["Last 30 days", "Last 90 days", "Custom range", "Today", "Yesterday"]
     default_date_idx = 0
@@ -720,7 +725,7 @@ def main():
             
             # Toggle for Data Highlights
             show_highlights = st.checkbox("📊 Show Data Highlights", value=True)
-            
+        
             if show_highlights:
                 # Summary metrics
                 col1, col2, col3, col4 = st.columns(4)
@@ -738,277 +743,277 @@ def main():
                     unique_entities = len(set(
                         entity
                         for c in contracts
-                        for entity in (c.get('adjudicante', []) if isinstance(c.get('adjudicante'), list) else [])
+                                for entity in (c.get('adjudicante', []) if isinstance(c.get('adjudicante'), list) else [])
                     ))
                     st.metric("Unique Entities", unique_entities)
-            
-            st.markdown("---")
-            
-            # Tabs for different views
-            tab1, tab2, tab3, tab4 = st.tabs(["📋 Contratos", "📢 Procedimentos Abertos", "📈 Analytics", "📄 Detailed View"])
-            
-            with tab1:
-                # Convert to DataFrame
-                df = contracts_to_dataframe(contracts)
                 
-                # Display table with clickable links
-                st.dataframe(
-                df,
-                use_container_width=True,
-                height=600,
-                column_config={
-                    "View Contract": st.column_config.LinkColumn(
-                        "🔗 Contract",
-                        help="Click to view full contract on Base.gov.pt",
-                        display_text="View"
-                    ),
-                    "Price (€)": st.column_config.NumberColumn(
-                        "Price (€)",
-                        format="€%.2f"
-                    )
-                },
-                hide_index=True
-            )
-            
-            # Download button
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download as CSV",
-                data=csv,
-                file_name=f"contracts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-        
-            with tab2:
-                # Announcements/Open Procedures Tab (for contracts view - shows empty if searching contracts)
-                if announcements:
-                    st.subheader(f"📢 {len(announcements)} Open Procedures Found")
+                st.markdown("---")
+                
+                # Tabs for different views
+                tab1, tab2, tab3, tab4 = st.tabs(["📋 Contratos", "📢 Procedimentos Abertos", "📈 Analytics", "📄 Detailed View"])
+                
+                with tab1:
+                    # Convert to DataFrame
+                    df = contracts_to_dataframe(contracts)
                     
-                    # Convert to DataFrame and display
-                    df_announcements = announcements_to_dataframe(announcements)
-                    
-                    # Display the table with clickable links
+                    # Display table with clickable links
                     st.dataframe(
-                        df_announcements,
+                        df,
                         use_container_width=True,
                         height=600,
                         column_config={
-                            "View": st.column_config.LinkColumn(
-                                "🔗 Ver",
-                                help="Click to view announcement on Base.gov.pt",
-                                display_text="Ver"
+                            "View Contract": st.column_config.LinkColumn(
+                                "🔗 Contract",
+                                help="Click to view full contract on Base.gov.pt",
+                                display_text="View"
                             ),
-                            "Docs": st.column_config.LinkColumn(
-                                "📄 Docs",
-                                help="Click to download procedure documents",
-                                display_text="Docs"
-                            ),
-                            "Preço Base (€)": st.column_config.NumberColumn(
-                                "Preço Base (€)",
+                            "Price (€)": st.column_config.NumberColumn(
+                                "Price (€)",
                                 format="€%.2f"
                             )
                         },
-                        hide_index=True,
+                        hide_index=True
                     )
                     
                     # Download button
-                    csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
+                    csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="📥 Download as CSV",
-                        data=csv_announcements,
-                        file_name=f"announcements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv",
+                        data=csv,
+                        file_name=f"contracts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
                     )
-                    
-                    # Summary statistics
-                    st.markdown("---")
-                    st.subheader("📊 Procedure Statistics")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        total_base_price = sum(format_price(a.get('PrecoBase', '0')) for a in announcements)
-                        st.metric("Total Base Price", f"€{total_base_price:,.2f}")
-                    
-                    with col2:
-                        unique_entities = len(set(a.get('designacaoEntidade', 'N/A') for a in announcements))
-                        st.metric("Unique Entities", unique_entities)
-                    
-                    with col3:
-                        avg_base_price = total_base_price / len(announcements) if announcements else 0
-                        st.metric("Average Base Price", f"€{avg_base_price:,.2f}")
-                else:
-                    st.info("No open procedures found. Try adjusting your search filters or date range.")
-            
-            with tab3:
-                col1, col2 = st.columns(2)
-            
-            with col1:
-                # Contract types distribution
-                st.subheader("Contract Types Distribution")
-                type_counts = {}
-                for c in contracts:
-                    tipos = c.get('tipoContrato', ['Unknown'])
-                    if not isinstance(tipos, list):
-                        tipos = [str(tipos)]
-                    for ctype in tipos:
-                        type_counts[ctype] = type_counts.get(ctype, 0) + 1
                 
-                if type_counts:
-                    type_df = pd.DataFrame(
-                        list(type_counts.items()),
-                        columns=['Type', 'Count']
-                    ).sort_values('Count', ascending=False)
-                    
-                    st.bar_chart(type_df.set_index('Type'))
-                else:
-                    st.info("No contract type data available")
-            
-            with col2:
-                # Top contracting entities
-                st.subheader("Top 10 Contracting Entities")
-                entity_counts = {}
-                for c in contracts:
-                    entities = c.get('adjudicante', [])
-                    if not isinstance(entities, list):
-                        entities = [str(entities)] if entities else []
-                    for entity in entities:
-                        if entity:  # Skip empty strings
-                            entity_counts[entity] = entity_counts.get(entity, 0) + 1
+                with tab2:
+                    # Announcements/Open Procedures Tab (for contracts view - shows empty if searching contracts)
+                    if announcements:
+                        st.subheader(f"📢 {len(announcements)} Open Procedures Found")
+                        
+                        # Convert to DataFrame and display
+                        df_announcements = announcements_to_dataframe(announcements)
+                        
+                        # Display the table with clickable links
+                        st.dataframe(
+                            df_announcements,
+                            use_container_width=True,
+                            height=600,
+                            column_config={
+                                "View": st.column_config.LinkColumn(
+                                    "🔗 Ver",
+                                    help="Click to view announcement on Base.gov.pt",
+                                    display_text="Ver"
+                                ),
+                                "Docs": st.column_config.LinkColumn(
+                                    "📄 Docs",
+                                    help="Click to download procedure documents",
+                                    display_text="Docs"
+                                ),
+                                "Preço Base (€)": st.column_config.NumberColumn(
+                                    "Preço Base (€)",
+                                    format="€%.2f"
+                                )
+                            },
+                            hide_index=True,
+                        )
+                        
+                        # Download button
+                        csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download as CSV",
+                            data=csv_announcements,
+                            file_name=f"announcements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                        )
+                        
+                        # Summary statistics
+                        st.markdown("---")
+                        st.subheader("📊 Procedure Statistics")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            total_base_price = sum(format_price(a.get('PrecoBase', '0')) for a in announcements)
+                            st.metric("Total Base Price", f"€{total_base_price:,.2f}")
+                        
+                        with col2:
+                            unique_entities = len(set(a.get('designacaoEntidade', 'N/A') for a in announcements))
+                            st.metric("Unique Entities", unique_entities)
+                        
+                        with col3:
+                            avg_base_price = total_base_price / len(announcements) if announcements else 0
+                            st.metric("Average Base Price", f"€{avg_base_price:,.2f}")
+                    else:
+                        st.info("No open procedures found. Try adjusting your search filters or date range.")
                 
-                if entity_counts:
-                    top_entities = sorted(
-                        entity_counts.items(),
-                        key=lambda x: x[1],
-                        reverse=True
-                    )[:10]
-                    
-                    entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
-                    st.dataframe(entity_df, use_container_width=True, hide_index=True)
-                else:
-                    st.info("No entity data available")
-            
-                # Price distribution
-                st.subheader("Price Distribution")
-                prices = [format_price(c.get('precoContratual', '0')) for c in contracts]
-                prices = [p for p in prices if p > 0]  # Remove zero prices
-                
-                if prices:
-                    price_df = pd.DataFrame({'Price (€)': prices})
-                    st.bar_chart(price_df['Price (€)'])
-                    
-                    st.write(f"**Min Price:** €{min(prices):,.2f}")
-                    st.write(f"**Max Price:** €{max(prices):,.2f}")
-                    st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
-                else:
-                    st.info("No price data available")
-            
-            with tab4:
-                # Detailed view of each contract
-                st.subheader("Contract Details")
-            
-            # Pagination
-            items_per_page = 10
-            total_pages = (len(contracts) - 1) // items_per_page + 1
-            
-            page = st.number_input(
-                "Page",
-                min_value=1,
-                max_value=total_pages,
-                value=1,
-                step=1
-            )
-            
-            start_idx = (page - 1) * items_per_page
-            end_idx = min(start_idx + items_per_page, len(contracts))
-            
-            st.write(f"Showing contracts {start_idx + 1} to {end_idx} of {len(contracts)}")
-            
-            for i, contract in enumerate(contracts[start_idx:end_idx], start=start_idx + 1):
-                with st.expander(f"**{i}. {contract.get('objectoContrato', 'N/A')}** - €{format_price(contract.get('precoContratual', '0')):,.2f}"):
-                    # Basic Information Table
-                    st.markdown("**📋 Basic Information**")
-                    basic_info = pd.DataFrame({
-                        'Field': ['Contract ID', 'Publication Date', 'Celebration Date', 'Contract Price', 'Announcement ID'],
-                        'Value': [
-                            contract.get('idcontrato') or contract.get('idContrato', 'N/A'),
-                            contract.get('dataPublicacao', 'N/A'),
-                            contract.get('dataCelebracaoContrato', 'N/A'),
-                            f"€{format_price(contract.get('precoContratual', '0')):,.2f}",
-                            contract.get('nAnuncio', 'N/A')
-                        ]
-                    })
-                    st.dataframe(basic_info, hide_index=True, use_container_width=True)
-                    
-                    # Contract Type and Procedure Table
-                    st.markdown("**📝 Type & Procedure**")
-                    tipo_contrato = contract.get('tipoContrato', ['N/A'])
-                    if not isinstance(tipo_contrato, list):
-                        tipo_contrato = [str(tipo_contrato)]
-                    type_info = pd.DataFrame({
-                        'Field': ['Contract Type', 'Procedure Type', 'Framework Agreement'],
-                        'Value': [
-                            ', '.join(str(x) for x in tipo_contrato),
-                            contract.get('tipoprocedimento', 'N/A'),
-                            contract.get('acordoQuadro', 'N/A')
-                        ]
-                    })
-                    st.dataframe(type_info, hide_index=True, use_container_width=True)
-                    
-                    # Entities Table
+                with tab3:
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.markdown("**🏢 Contracting Entities**")
-                        adjudicante = contract.get('adjudicante', ['N/A'])
-                        if not isinstance(adjudicante, list):
-                            adjudicante = [str(adjudicante)]
-                        entities_df = pd.DataFrame({
-                            'Entity': adjudicante
-                        })
-                        st.dataframe(entities_df, hide_index=True, use_container_width=True)
+                        # Contract types distribution
+                        st.subheader("Contract Types Distribution")
+                        type_counts = {}
+                        for c in contracts:
+                            tipos = c.get('tipoContrato', ['Unknown'])
+                            if not isinstance(tipos, list):
+                                tipos = [str(tipos)]
+                            for ctype in tipos:
+                                type_counts[ctype] = type_counts.get(ctype, 0) + 1
+                            
+                        if type_counts:
+                            type_df = pd.DataFrame(
+                                list(type_counts.items()),
+                                columns=['Type', 'Count']
+                            ).sort_values('Count', ascending=False)
+                            
+                            st.bar_chart(type_df.set_index('Type'))
+                        else:
+                            st.info("No contract type data available")
                     
                     with col2:
-                        st.markdown("**👔 Contractors**")
-                        adjudicatarios = contract.get('adjudicatarios', ['N/A'])
-                        if not isinstance(adjudicatarios, list):
-                            adjudicatarios = [str(adjudicatarios)]
-                        contractors_df = pd.DataFrame({
-                            'Contractor': adjudicatarios
-                        })
-                        st.dataframe(contractors_df, hide_index=True, use_container_width=True)
+                        # Top contracting entities
+                        st.subheader("Top 10 Contracting Entities")
+                        entity_counts = {}
+                        for c in contracts:
+                            entities = c.get('adjudicante', [])
+                            if not isinstance(entities, list):
+                                entities = [str(entities)] if entities else []
+                            for entity in entities:
+                                if entity:  # Skip empty strings
+                                    entity_counts[entity] = entity_counts.get(entity, 0) + 1
+                            
+                        if entity_counts:
+                            top_entities = sorted(
+                                entity_counts.items(),
+                                key=lambda x: x[1],
+                                reverse=True
+                            )[:10]
+                            
+                            entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Contracts'])
+                            st.dataframe(entity_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No entity data available")
                     
-                    # CPV Codes Table
-                    cpv_codes = contract.get('cpv', [])
-                    if cpv_codes:
-                        if not isinstance(cpv_codes, list):
-                            cpv_codes = [str(cpv_codes)]
-                        st.markdown("**🏷️ CPV Codes (Classification)**")
-                        cpv_df = pd.DataFrame({
-                            'CPV Code': cpv_codes
-                        })
-                        st.dataframe(cpv_df, hide_index=True, use_container_width=True)
+                    # Price distribution
+                    st.subheader("Price Distribution")
+                    prices = [format_price(c.get('precoContratual', '0')) for c in contracts]
+                    prices = [p for p in prices if p > 0]  # Remove zero prices
                     
-                    # Location Information
-                    locations = contract.get('localExecucao', [])
-                    if locations:
-                        if not isinstance(locations, list):
-                            locations = [str(locations)]
-                        st.markdown("**📍 Execution Locations**")
-                        location_df = pd.DataFrame({
-                            'Location': locations
-                        })
-                        st.dataframe(location_df, hide_index=True, use_container_width=True)
+                    if prices:
+                        price_df = pd.DataFrame({'Price (€)': prices})
+                        st.bar_chart(price_df['Price (€)'])
+                        
+                        st.write(f"**Min Price:** €{min(prices):,.2f}")
+                        st.write(f"**Max Price:** €{max(prices):,.2f}")
+                        st.write(f"**Median Price:** €{sorted(prices)[len(prices)//2]:,.2f}")
+                    else:
+                        st.info("No price data available")
+                
+                with tab4:
+                    # Detailed view of each contract
+                    st.subheader("Contract Details")
                     
-                    # Description
-                    if contract.get('descContrato'):
-                        st.markdown("**📄 Description**")
-                        st.info(contract.get('descContrato'))
+                    # Pagination
+                    items_per_page = 10
+                    total_pages = (len(contracts) - 1) // items_per_page + 1
                     
-                    # Object (always present)
-                    if contract.get('objectoContrato'):
-                        st.markdown("**🎯 Contract Object**")
-                        st.success(contract.get('objectoContrato'))
+                    page = st.number_input(
+                        "Page",
+                        min_value=1,
+                        max_value=total_pages,
+                        value=1,
+                        step=1
+                    )
+                    
+                    start_idx = (page - 1) * items_per_page
+                    end_idx = min(start_idx + items_per_page, len(contracts))
+                    
+                    st.write(f"Showing contracts {start_idx + 1} to {end_idx} of {len(contracts)}")
+                    
+                    for i, contract in enumerate(contracts[start_idx:end_idx], start=start_idx + 1):
+                        with st.expander(f"**{i}. {contract.get('objectoContrato', 'N/A')}** - €{format_price(contract.get('precoContratual', '0')):,.2f}"):
+                            # Basic Information Table
+                            st.markdown("**📋 Basic Information**")
+                            basic_info = pd.DataFrame({
+                                'Field': ['Contract ID', 'Publication Date', 'Celebration Date', 'Contract Price', 'Announcement ID'],
+                                'Value': [
+                                    contract.get('idcontrato') or contract.get('idContrato', 'N/A'),
+                                    contract.get('dataPublicacao', 'N/A'),
+                                    contract.get('dataCelebracaoContrato', 'N/A'),
+                                    f"€{format_price(contract.get('precoContratual', '0')):,.2f}",
+                                    contract.get('nAnuncio', 'N/A')
+                                ]
+                            })
+                            st.dataframe(basic_info, hide_index=True, use_container_width=True)
+                            
+                            # Contract Type and Procedure Table
+                            st.markdown("**📝 Type & Procedure**")
+                            tipo_contrato = contract.get('tipoContrato', ['N/A'])
+                            if not isinstance(tipo_contrato, list):
+                                tipo_contrato = [str(tipo_contrato)]
+                            type_info = pd.DataFrame({
+                                'Field': ['Contract Type', 'Procedure Type', 'Framework Agreement'],
+                                'Value': [
+                                    ', '.join(str(x) for x in tipo_contrato),
+                                    contract.get('tipoprocedimento', 'N/A'),
+                                    contract.get('acordoQuadro', 'N/A')
+                                ]
+                            })
+                            st.dataframe(type_info, hide_index=True, use_container_width=True)
+                            
+                            # Entities Table
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.markdown("**🏢 Contracting Entities**")
+                                adjudicante = contract.get('adjudicante', ['N/A'])
+                                if not isinstance(adjudicante, list):
+                                    adjudicante = [str(adjudicante)]
+                                entities_df = pd.DataFrame({
+                                    'Entity': adjudicante
+                                })
+                                st.dataframe(entities_df, hide_index=True, use_container_width=True)
+                            
+                            with col2:
+                                st.markdown("**👔 Contractors**")
+                                adjudicatarios = contract.get('adjudicatarios', ['N/A'])
+                                if not isinstance(adjudicatarios, list):
+                                    adjudicatarios = [str(adjudicatarios)]
+                                contractors_df = pd.DataFrame({
+                                    'Contractor': adjudicatarios
+                                })
+                                st.dataframe(contractors_df, hide_index=True, use_container_width=True)
+                            
+                            # CPV Codes Table
+                            cpv_codes = contract.get('cpv', [])
+                            if cpv_codes:
+                                if not isinstance(cpv_codes, list):
+                                    cpv_codes = [str(cpv_codes)]
+                                st.markdown("**🏷️ CPV Codes (Classification)**")
+                                cpv_df = pd.DataFrame({
+                                    'CPV Code': cpv_codes
+                                })
+                                st.dataframe(cpv_df, hide_index=True, use_container_width=True)
+                            
+                            # Location Information
+                            locations = contract.get('localExecucao', [])
+                            if locations:
+                                if not isinstance(locations, list):
+                                    locations = [str(locations)]
+                                st.markdown("**📍 Execution Locations**")
+                                location_df = pd.DataFrame({
+                                    'Location': locations
+                                })
+                                st.dataframe(location_df, hide_index=True, use_container_width=True)
+                            
+                            # Description
+                            if contract.get('descContrato'):
+                                st.markdown("**📄 Description**")
+                                st.info(contract.get('descContrato'))
+                            
+                            # Object (always present)
+                            if contract.get('objectoContrato'):
+                                st.markdown("**🎯 Contract Object**")
+                                st.success(contract.get('objectoContrato'))
         
         elif st.session_state.search_type == 'announcements' and st.session_state.filtered_announcements:
             # Show only announcements (open procedures)
@@ -1088,7 +1093,7 @@ def main():
     
     else:
         # Only show sample table if no search has been performed yet
-        if not st.session_state.search_performed:
+        if not st.session_state.search_performed and not FAST_BOOT:
             # Welcome message
             st.info("👈 Use the filters in the sidebar to search for contracts")
             
@@ -1144,5 +1149,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Render the exception in the UI so Streamlit health check doesn't fail silently
+        import streamlit as st
+        import traceback
+        st.error("🚨 The app encountered an error during startup.")
+        st.exception(e)
+        # Also print full traceback to logs for Streamlit Cloud
+        traceback.print_exc()
 
