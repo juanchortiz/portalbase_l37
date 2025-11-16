@@ -11,6 +11,9 @@ from cached_api_client import CachedBaseAPIClient
 from config import get_api_key
 import json
 import os
+import io
+import zipfile
+import requests
 
 # FAST BOOT: skip heavy startup work on cloud to satisfy health checks
 FAST_BOOT = os.environ.get("FAST_BOOT", "1") == "1"
@@ -112,6 +115,66 @@ COMMON_LOCATIONS = [
     "Portugal, Região Autónoma dos Açores, Ponta Delgada",
     "Portugal, Região Autónoma dos Açores, Angra do Heroismo",
 ]
+
+GITHUB_REPO_DEFAULT = "juanchortiz/portalbase_l37"
+
+def get_github_token():
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "GITHUB_TOKEN" in st.secrets:
+            return st.secrets["GITHUB_TOKEN"]
+    except Exception:
+        pass
+    return os.environ.get("GITHUB_TOKEN")
+
+def get_repo_slug():
+    # Try env provided by GitHub/Cloud, else fallback to default
+    return os.environ.get("GITHUB_REPOSITORY") or GITHUB_REPO_DEFAULT
+
+def ensure_local_db(db_path: str = "base_cache.db", timeout_seconds: int = 20) -> None:
+    """If DB is missing/empty, attempt to download latest artifact from GitHub Actions.
+    Requires GITHUB_TOKEN (repo scope) in Streamlit secrets or environment.
+    Safe no-op if token not available or request fails.
+    """
+    try:
+        if os.path.exists(db_path) and os.path.getsize(db_path) > 200_000:  # > ~200KB
+            return
+        token = get_github_token()
+        if not token:
+            return
+        repo = get_repo_slug()
+        session = requests.Session()
+        session.headers.update({
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "portalbase-streamlit-app"
+        })
+        # List artifacts and find the newest base-cache-db
+        url = f"https://api.github.com/repos/{repo}/actions/artifacts?per_page=100"
+        resp = session.get(url, timeout=timeout_seconds)
+        resp.raise_for_status()
+        artifacts = resp.json().get("artifacts", [])
+        candidates = [a for a in artifacts if a.get("name") == "base-cache-db" and not a.get("expired")]
+        if not candidates:
+            return
+        latest = sorted(candidates, key=lambda a: a.get("updated_at", ""), reverse=True)[0]
+        artifact_id = latest.get("id")
+        if not artifact_id:
+            return
+        # Download zip
+        zip_url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
+        zip_resp = session.get(zip_url, timeout=timeout_seconds)
+        zip_resp.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(zip_resp.content)) as zf:
+            # Expect base_cache.db in root
+            for member in zf.namelist():
+                if member.endswith("base_cache.db"):
+                    with zf.open(member) as src, open(db_path, "wb") as dst:
+                        dst.write(src.read())
+                    break
+    except Exception:
+        # Silent fail - app can still run and fetch on demand
+        pass
 
 
 # Page configuration
@@ -319,6 +382,16 @@ def announcements_to_dataframe(announcements):
 
 def main():
     # Hero section with brand gradient background
+    
+    # Try to ensure DB is present (download artifact) quickly on first boot
+    try:
+        if not os.path.exists("base_cache.db") or os.path.getsize("base_cache.db") < 200_000:
+            # In FAST_BOOT we still attempt this (quick HTTP); if it fails, we continue
+            with st.spinner("Preparing cache (one-time setup)..."):
+                ensure_local_db()
+    except Exception:
+        pass
+
     st.markdown("""
     <div style="
         background: linear-gradient(135deg, #6e0102 0%, #191d34 100%);
