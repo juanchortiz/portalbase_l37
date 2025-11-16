@@ -380,6 +380,44 @@ def announcements_to_dataframe(announcements):
     return pd.DataFrame(data)
 
 
+# Helper to fetch announcements for a date range efficiently by year
+from datetime import date as _date
+
+def _parse_ddmmyyyy(s: str):
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date()
+    except Exception:
+        return None
+
+def fetch_announcements_range_by_year(api_client, start_d: _date, end_d: _date):
+    """Fetch announcements covering [start_d, end_d] by requesting whole years and filtering locally.
+    Falls back gracefully on errors. Returns a list of announcement dicts.
+    """
+    try:
+        results = []
+        y0, y1 = start_d.year, end_d.year
+        for y in range(y0, y1 + 1):
+            try:
+                year_items = api_client.get_announcement_info(ano=str(y))
+                if not year_items:
+                    continue
+                if isinstance(year_items, dict):
+                    year_list = [year_items]
+                else:
+                    year_list = list(year_items)
+                # filter by publication date in DD/MM/YYYY
+                for a in year_list:
+                    ds = a.get("dataPublicacao")
+                    d = _parse_ddmmyyyy(ds) if isinstance(ds, str) else None
+                    if d and start_d <= d <= end_d:
+                        results.append(a)
+            except Exception:
+                continue
+        return results
+    except Exception:
+        return []
+
+
 def main():
     # Hero section with brand gradient background
     
@@ -739,12 +777,20 @@ def main():
                 if start_date == end_date:
                     announcements = st.session_state.client.get_announcements_by_date(start_str)
                 else:
-                    announcements = []
-                    current_date = start_date
-                    while current_date <= end_date:
-                        date_str = current_date.strftime("%d/%m/%Y")
-                        announcements.extend(st.session_state.client.get_announcements_by_date(date_str))
-                        current_date += timedelta(days=1)
+                    span_days = (end_date - start_date).days
+                    if span_days > 3:
+                        # Fast path: fetch by year and filter locally
+                        announcements = fetch_announcements_range_by_year(
+                            st.session_state.client.client, start_date, end_date
+                        )
+                    else:
+                        # Small range: fetch day-by-day
+                        announcements = []
+                        current_date = start_date
+                        while current_date <= end_date:
+                            date_str = current_date.strftime("%d/%m/%Y")
+                            announcements.extend(st.session_state.client.get_announcements_by_date(date_str))
+                            current_date += timedelta(days=1)
             
             # Debug: Show initial results
             if st.session_state.search_type == 'contracts':
