@@ -12,12 +12,69 @@ Designed to run daily via GitHub Actions or scheduled task.
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from cached_api_client import CachedBaseAPIClient
 from config import get_api_key
 from filter_utils import filter_contracts
 from hubspot_automation import create_deal_from_announcement, check_deal_exists, get_hubspot_token
 import time
+
+
+def parse_date_value(value):
+    if not value:
+        return None
+    s = str(value).strip()
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def range_from_option(option):
+    if not option:
+        return None
+    today = datetime.now().date()
+    if option == "Today":
+        return today, today
+    if option == "Yesterday":
+        y = today - timedelta(days=1)
+        return y, y
+    if option == "Last 30 days":
+        end = today - timedelta(days=1)
+        start = today - timedelta(days=30)
+        return start, end
+    if option == "Last 90 days":
+        end = today - timedelta(days=1)
+        start = today - timedelta(days=90)
+        return start, end
+    return None
+
+
+def resolve_date_range(filters, env_vars, days_to_check, safety_days):
+    env_start = parse_date_value(env_vars.get('START_DATE'))
+    env_end = parse_date_value(env_vars.get('END_DATE'))
+    if env_start and env_end:
+        return env_start, env_end, "env override"
+    if env_start or env_end:
+        raise ValueError("Both START_DATE and END_DATE must be provided when overriding.")
+
+    option = (filters or {}).get('date_option') if filters else None
+    if option == "Custom range":
+        fs = parse_date_value((filters or {}).get('start_date'))
+        fe = parse_date_value((filters or {}).get('end_date'))
+        if fs and fe:
+            return fs, fe, "saved search custom"
+    else:
+        opt_range = range_from_option(option)
+        if opt_range:
+            return opt_range[0], opt_range[1], f"saved search ({option})"
+
+    end_date = (datetime.now() - timedelta(days=1)).date()
+    span = max(0, days_to_check - 1 + max(0, safety_days))
+    start_date = end_date - timedelta(days=span)
+    return start_date, end_date, "default sliding"
 
 
 def main():
@@ -34,38 +91,7 @@ def main():
     # This should match a saved search created in the Streamlit app
     SAVED_SEARCH_NAME = os.environ.get('AUTOMATION_SAVED_SEARCH', 'Default Automation')
     
-    # Date range resolution
-    # Allow explicit overrides via env START_DATE/END_DATE (DD/MM/YYYY or YYYY-MM-DD)
-    def _parse_env_date(val: str):
-        if not val:
-            return None
-        s = val.strip()
-        for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except Exception:
-                continue
-        raise ValueError(f"Invalid date format for '{s}'. Use DD/MM/YYYY or YYYY-MM-DD.")
-
-    env_start = _parse_env_date(os.environ.get('START_DATE', '').strip()) if os.environ.get('START_DATE') else None
-    env_end = _parse_env_date(os.environ.get('END_DATE', '').strip()) if os.environ.get('END_DATE') else None
-
-    if env_start and env_end:
-        start_date = env_start
-        end_date = env_end
-    else:
-        # Fallback to sliding window: yesterday back N days (+optional safety days)
-        DAYS_TO_CHECK = int(os.environ.get('DAYS_TO_CHECK', '1'))
-        SAFETY_DAYS = int(os.environ.get('SAFETY_DAYS', '0'))
-        end_date = (datetime.now() - timedelta(days=1)).date()  # Yesterday
-        start_date = end_date - timedelta(days=max(0, DAYS_TO_CHECK - 1 + max(0, SAFETY_DAYS)))
-
-    start_date_str = start_date.strftime('%d/%m/%Y')
-    end_date_str = end_date.strftime('%d/%m/%Y')
     sync_date = datetime.now().strftime('%Y-%m-%d')
-    
-    print(f"📅 Date range: {start_date_str} to {end_date_str}")
-    print(f"🔍 Using saved search: {SAVED_SEARCH_NAME}\n")
     
     try:
         # Initialize API client
@@ -159,6 +185,14 @@ def main():
             sys.exit(1)
         
         print()
+        
+        DAYS_TO_CHECK = int(os.environ.get('DAYS_TO_CHECK', '1'))
+        SAFETY_DAYS = int(os.environ.get('SAFETY_DAYS', '0'))
+        start_date, end_date, date_source = resolve_date_range(filters, os.environ, DAYS_TO_CHECK, SAFETY_DAYS)
+        start_date_str = start_date.strftime('%d/%m/%Y')
+        end_date_str = end_date.strftime('%d/%m/%Y')
+        print(f"📅 Date range: {start_date_str} to {end_date_str} (source: {date_source})")
+        print(f"🔍 Using saved search: {SAVED_SEARCH_NAME}\n")
         
         # Sync new announcements
         print("📥 Syncing new announcements from API...")
