@@ -8,12 +8,66 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from cached_api_client import CachedBaseAPIClient
-from config import get_api_key
+from config import get_api_key, get_github_token, get_github_repo
 import json
 import os
 import io
 import zipfile
 import requests
+import base64
+
+
+def update_search_json_in_github(search_name: str, filters: dict) -> tuple[bool, str]:
+    """Update the search JSON file in GitHub repo."""
+    token = get_github_token()
+    repo = get_github_repo()
+    
+    if not token or not repo:
+        return False, "GitHub token or repo not configured"
+    
+    filename = f"{search_name}_search.json"
+    api_url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+    
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # Prepare the new content
+    new_content = {
+        "name": search_name,
+        "filters": {
+            "keyword": filters.get("keyword", ""),
+            "fornecedor_nif": filters.get("fornecedor_nif", ""),
+            "location": filters.get("location", []),
+            "cpv_codes": filters.get("cpv_codes", [])
+        }
+    }
+    content_str = json.dumps(new_content, indent=2, ensure_ascii=False)
+    content_b64 = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+    
+    try:
+        # Get current file SHA (needed for update)
+        resp = requests.get(api_url, headers=headers, timeout=10)
+        sha = resp.json().get("sha") if resp.status_code == 200 else None
+        
+        # Create or update the file
+        payload = {
+            "message": f"Update {search_name} search filters from app",
+            "content": content_b64,
+            "branch": "main"
+        }
+        if sha:
+            payload["sha"] = sha
+        
+        resp = requests.put(api_url, headers=headers, json=payload, timeout=10)
+        
+        if resp.status_code in [200, 201]:
+            return True, "Filters saved to GitHub repo"
+        else:
+            return False, f"GitHub API error: {resp.status_code}"
+    except Exception as e:
+        return False, str(e)
 
 # FAST BOOT: skip heavy startup work on cloud to satisfy health checks
 FAST_BOOT = os.environ.get("FAST_BOOT", "1") == "1"
@@ -705,28 +759,27 @@ def main():
                         search_exists = any(s['name'] == search_name for s in all_searches)
                         
                         try:
-                            # Always use save_search since it now uses INSERT OR REPLACE
+                            # Save to local DB
                             success = st.session_state.client.save_search(search_name, current_filters)
                             
                             if success:
-                                # Reload the updated filters to refresh the UI
                                 updated_filters = st.session_state.client.load_search(search_name)
                                 if updated_filters:
                                     st.session_state.loaded_filters = updated_filters
-                                st.toast(f"✅ Updated: {search_name}")
+                                
+                                # Also update GitHub repo for automation persistence
+                                gh_ok, gh_msg = update_search_json_in_github(search_name, current_filters)
+                                if gh_ok:
+                                    st.toast(f"✅ Updated: {search_name} (synced to GitHub)")
+                                else:
+                                    st.toast(f"✅ Updated locally (GitHub: {gh_msg})")
                             else:
                                 st.error(f"❌ Failed to update saved search '{search_name}'.")
-                                with st.expander("Debug info"):
-                                    st.write(f"Search exists in DB: {search_exists}")
-                                    st.write(f"Search name: '{search_name}'")
-                                    st.write(f"CPV codes being saved: {cpv_codes}")
-                                    st.write(f"All filters: {current_filters}")
                         except Exception as e:
                             import traceback
-                            error_details = traceback.format_exc()
                             st.error(f"❌ Error updating search: {str(e)}")
                             with st.expander("Error details"):
-                                st.code(error_details)
+                                st.code(traceback.format_exc())
             with col2:
                 if st.button("❌ Clear", use_container_width=True, help="Clear loaded search"):
                     st.session_state.current_search_name = None

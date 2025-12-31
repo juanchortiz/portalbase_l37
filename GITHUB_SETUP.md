@@ -39,7 +39,7 @@ All scripts now load the API key securely:
 ### Step 1: Verify No Secrets Will Be Committed
 
 ```bash
-cd "/Users/juanortiz/Desktop/Portal Base"
+cd "/Users/juanortiz/Projects/web-apps/portal-base"
 
 # Check what will be committed
 git status

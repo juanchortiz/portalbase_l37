@@ -106,3 +106,67 @@ def get_hubspot_token():
         "or add it to Secrets file as: HUBSPOT_API_TOKEN:\"your_token_here\""
     )
 
+
+def get_github_token():
+    """Get GitHub Personal Access Token for repo updates."""
+    # Try environment variable
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        return token
+    
+    # Try Streamlit secrets
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'GITHUB_TOKEN' in st.secrets:
+            return st.secrets['GITHUB_TOKEN']
+    except (ImportError, FileNotFoundError, KeyError):
+        pass
+    
+    # Try Secrets file
+    secrets_file = os.path.join(os.path.dirname(__file__), 'Secrets')
+    if os.path.exists(secrets_file):
+        try:
+            with open(secrets_file, 'r') as f:
+                for line in f:
+                    if line.strip().startswith('GITHUB_TOKEN'):
+                        if ':' in line:
+                            token = line.split(':', 1)[1].strip().strip('"')
+                            if token:
+                                return token
+        except Exception:
+            pass
+    
+    return None
+
+
+def get_github_repo():
+    """Get GitHub repo info (owner/repo) from config."""
+    # Try environment variable
+    repo = os.environ.get('GITHUB_REPO')
+    if repo:
+        return repo
+    
+    # Try Streamlit secrets
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'GITHUB_REPO' in st.secrets:
+            return st.secrets['GITHUB_REPO']
+    except (ImportError, FileNotFoundError, KeyError):
+        pass
+    
+    # Try Secrets file
+    secrets_file = os.path.join(os.path.dirname(__file__), 'Secrets')
+    if os.path.exists(secrets_file):
+        try:
+            with open(secrets_file, 'r') as f:
+                for line in f:
+                    if line.strip().startswith('GITHUB_REPO'):
+                        if ':' in line:
+                            repo = line.split(':', 1)[1].strip().strip('"')
+                            if repo:
+                                return repo
+        except Exception:
+            pass
+    
+    return None
+

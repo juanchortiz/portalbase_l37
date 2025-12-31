@@ -5,7 +5,7 @@
 ### Launch the App
 
 ```bash
-cd "/Users/juanortiz/Desktop/Portal Base"
+cd "/Users/juanortiz/Projects/web-apps/portal-base"
 streamlit run app.py
 ```
 
