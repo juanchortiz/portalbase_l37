@@ -2,13 +2,14 @@
 HubSpot Automation Module
 
 Handles creation of HubSpot deals from Portal Base announcements.
+Includes company matching/creation by NIF and deal-company association.
 """
 
 import requests
 import json
 from datetime import datetime
 import calendar
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 
 def get_hubspot_token() -> str:
@@ -66,6 +67,9 @@ STAGE_NAME = "Alerta de publicação da plataforma"
 
 # Cache for pipeline/stage IDs (to avoid repeated API calls)
 _pipeline_cache = {}
+
+# Cache for company lookups by NIF
+_company_cache = {}
 
 
 def get_pipeline_and_stage_ids(api_token: str) -> tuple:
@@ -188,6 +192,204 @@ def format_price(price_str) -> Optional[float]:
         return None
 
 
+def find_company_by_nif(nif: str, api_token: str) -> Optional[str]:
+    """
+    Search for a HubSpot company by NIF.
+    
+    Args:
+        nif: Entity NIF (tax ID)
+        api_token: HubSpot API token
+        
+    Returns:
+        Company ID if found, None otherwise
+    """
+    global _company_cache
+    
+    if not nif:
+        return None
+    
+    nif = str(nif).strip()
+    if nif in _company_cache:
+        return _company_cache[nif]
+    
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    search_url = "https://api.hubapi.com/crm/v3/objects/companies/search"
+    search_payload = {
+        "filterGroups": [
+            {
+                "filters": [
+                    {
+                        "propertyName": "nif",
+                        "operator": "EQ",
+                        "value": nif
+                    }
+                ]
+            }
+        ],
+        "properties": ["hs_object_id", "name", "nif"]
+    }
+    
+    try:
+        response = requests.post(search_url, headers=headers, json=search_payload, timeout=30)
+        response.raise_for_status()
+        results = response.json()
+        
+        if results.get('results') and len(results['results']) > 0:
+            company_id = results['results'][0]['id']
+            _company_cache[nif] = company_id
+            return company_id
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Error searching company by NIF {nif}: {e}")
+        return None
+
+
+def get_entity_info_from_api(nif: str) -> Optional[Dict[str, Any]]:
+    """
+    Get entity information from Base.gov.pt API.
+    
+    Args:
+        nif: Entity NIF
+        
+    Returns:
+        Entity info dictionary or None
+    """
+    try:
+        from base_api_client import BaseAPIClient
+        from config import get_api_key
+        
+        client = BaseAPIClient(get_api_key())
+        entity_info = client.get_entity_info(nif_entidade=nif)
+        return entity_info if isinstance(entity_info, dict) else None
+    except Exception as e:
+        print(f"⚠️ Could not fetch entity info for NIF {nif}: {e}")
+        return None
+
+
+def create_company_from_entity(nif: str, entity_name: str, api_token: str, entity_info: Dict[str, Any] = None) -> Optional[str]:
+    """
+    Create a HubSpot company from entity data.
+    
+    Args:
+        nif: Entity NIF
+        entity_name: Entity name (from announcement)
+        api_token: HubSpot API token
+        entity_info: Optional entity info from Base API (will fetch if None)
+        
+    Returns:
+        New company ID if created, None otherwise
+    """
+    global _company_cache
+    
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    # Build company properties
+    properties = {
+        "name": entity_name,
+        "nif": str(nif)
+    }
+    
+    # Try to enrich with API data
+    if entity_info is None:
+        entity_info = get_entity_info_from_api(nif)
+    
+    if entity_info:
+        # Use correct field names from Base API
+        if entity_info.get('descPais'):
+            properties['country'] = entity_info.get('descPais', 'Portugal')
+        # Add contract statistics as description
+        num_contratos = entity_info.get('numContratos', 0)
+        tot_valor = entity_info.get('totAdjudicanteValorContratIni', 0)
+        if num_contratos or tot_valor:
+            desc = f"Total contratos: {num_contratos}\nValor total adjudicante: €{tot_valor:,.2f}"
+            properties['description'] = desc
+    
+    payload = {"properties": properties}
+    
+    try:
+        url = "https://api.hubapi.com/crm/v3/objects/companies"
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        company_id = result.get('id')
+        if company_id:
+            _company_cache[str(nif)] = company_id
+            print(f"   ✓ Created company: {entity_name} (NIF: {nif})")
+        return company_id
+    except requests.exceptions.RequestException as e:
+        error_msg = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_detail = e.response.json()
+                error_msg = f"{error_msg} - {json.dumps(error_detail)}"
+            except:
+                pass
+        print(f"❌ Error creating company {entity_name}: {error_msg}")
+        return None
+
+
+def find_or_create_company(nif: str, entity_name: str, api_token: str) -> Optional[str]:
+    """
+    Find existing company by NIF or create a new one.
+    
+    Args:
+        nif: Entity NIF
+        entity_name: Entity name
+        api_token: HubSpot API token
+        
+    Returns:
+        Company ID (existing or newly created), None if failed
+    """
+    if not nif:
+        return None
+    
+    # First try to find existing company
+    company_id = find_company_by_nif(nif, api_token)
+    if company_id:
+        return company_id
+    
+    # Not found, create new company
+    return create_company_from_entity(nif, entity_name, api_token)
+
+
+def associate_deal_with_company(deal_id: str, company_id: str, api_token: str) -> bool:
+    """
+    Create association between a deal and a company in HubSpot.
+    
+    Args:
+        deal_id: HubSpot deal ID
+        company_id: HubSpot company ID
+        api_token: HubSpot API token
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    if not deal_id or not company_id:
+        return False
+    
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    url = f"https://api.hubapi.com/crm/v3/objects/deals/{deal_id}/associations/companies/{company_id}/deal_to_company"
+    
+    try:
+        response = requests.put(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Error associating deal {deal_id} with company {company_id}: {e}")
+        return False
+
+
 def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeline_id: str = None, stage_id: str = None) -> Dict[str, Any]:
     """
     Convert announcement data to HubSpot deal properties.
@@ -233,6 +435,13 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
     cpvs = cpvs if isinstance(cpvs, list) else [str(cpvs)]
     cpvs_str = ', '.join(str(x) for x in cpvs[:5])
     
+    # Handle location (from contracts)
+    locations = announcement.get('localExecucao', [])
+    if isinstance(locations, list) and locations:
+        location_str = ', '.join(str(loc) for loc in locations[:3])
+    else:
+        location_str = ''
+    
     properties = {
         "dealname": description[:100] if description != 'N/A' else f"Anúncio {announcement_id}",
         "dealstage": stage_id if stage_id else "appointmentscheduled",
@@ -245,6 +454,20 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
         "codigos_cpv": cpvs_str,
         "entidade_contratante": announcement.get('designacaoEntidade', 'N/A')
     }
+    
+    # Add NIF if available
+    nif = announcement.get('nifEntidade', '')
+    if nif:
+        properties['nif_entidade'] = str(nif)
+    
+    # Add announcement type if available (API uses 'tipoActo')
+    tipo_anuncio = announcement.get('tipoActo', '') or announcement.get('TipoAnuncio', '')
+    if tipo_anuncio:
+        properties['tipo_anuncio'] = tipo_anuncio
+    
+    # Add location if available
+    if location_str:
+        properties['local_execucao'] = location_str
     
     if deadline_epoch_ms:
         properties['data_limite_submissao'] = deadline_epoch_ms
@@ -264,14 +487,17 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
 
 def create_deal_from_announcement(
     announcement: Dict[str, Any],
-    api_token: str = None
+    api_token: str = None,
+    associate_company: bool = True
 ) -> Optional[Dict[str, Any]]:
     """
     Create a HubSpot deal from an announcement.
+    Optionally finds or creates the contracting entity as a company and associates it.
     
     Args:
         announcement: Announcement dictionary from API
         api_token: HubSpot API token (if None, will use get_hubspot_token())
+        associate_company: If True, find/create company by NIF and associate with deal
         
     Returns:
         Response JSON from HubSpot API, or None if failed
@@ -296,7 +522,21 @@ def create_deal_from_announcement(
     try:
         response = requests.post(HUBSPOT_API_URL, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-        return response.json()
+        result = response.json()
+        deal_id = result.get('id')
+        
+        # Associate with company if requested
+        if associate_company and deal_id:
+            nif = announcement.get('nifEntidade', '')
+            entity_name = announcement.get('designacaoEntidade', '')
+            if nif and entity_name:
+                company_id = find_or_create_company(nif, entity_name, api_token)
+                if company_id:
+                    if associate_deal_with_company(deal_id, company_id, api_token):
+                        result['_company_id'] = company_id
+                        result['_company_associated'] = True
+        
+        return result
     except requests.exceptions.RequestException as e:
         error_msg = str(e)
         if hasattr(e, 'response') and e.response is not None:
