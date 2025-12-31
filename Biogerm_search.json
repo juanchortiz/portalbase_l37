@@ -1,11 +1,9 @@
 {
   "name": "Biogerm",
   "filters": {
-    "keyword": "",
+    "keyword": "meios de cultura",
     "fornecedor_nif": "",
     "location": [],
-    "cpv_codes": [
-      "33000000-0"
-    ]
+    "cpv_codes": []
   }
 }
