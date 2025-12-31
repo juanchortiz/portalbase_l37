@@ -555,6 +555,17 @@ def main():
     
     st.markdown("")
     
+    # #region agent log - always runs
+    import pathlib as _pl_always
+    _log_always = _pl_always.Path(__file__).parent / ".cursor" / "debug.log"
+    _log_always.parent.mkdir(exist_ok=True)
+    def _dbg_always(hyp, msg, data=None):
+        import time
+        with open(_log_always, "a") as _f:
+            _f.write(json.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(time.time()*1000)}) + "\n")
+    _dbg_always("H5", "App run state", {"client_initialized": st.session_state.get('client_initialized', False), "has_client": 'client' in st.session_state})
+    # #endregion
+    
     # Initialize API client lazily
     if not st.session_state.client_initialized:
         try:
@@ -623,6 +634,12 @@ def main():
             st.error(f"❌ Error initializing: {str(e)}")
             st.info("Please refresh the page or check your API key configuration.")
             st.stop()
+    
+    # #region agent log - check DB state after init
+    if st.session_state.client_initialized and 'client' in st.session_state:
+        _biogerm_check = st.session_state.client.load_search('Biogerm')
+        _dbg_always("H3", "Current DB state for Biogerm", {"cpvs": _biogerm_check.get('cpv_codes',[]) if _biogerm_check else None, "keyword": _biogerm_check.get('keyword','') if _biogerm_check else None, "db_path": st.session_state.client.db_path})
+    # #endregion
     
     # Sidebar - Filters
     st.sidebar.header("🔍 Filtros")
