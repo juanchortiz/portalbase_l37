@@ -562,6 +562,20 @@ def main():
                 ACCESS_TOKEN = get_api_key()
                 st.session_state.client = CachedBaseAPIClient(ACCESS_TOKEN)
                 st.session_state.client_initialized = True
+                
+                # Sync JSON search files to database (for Streamlit Cloud persistence)
+                import glob
+                for json_file in glob.glob("*_search.json"):
+                    try:
+                        with open(json_file, 'r') as f:
+                            search_data = json.load(f)
+                        if 'name' in search_data and 'filters' in search_data:
+                            st.session_state.client.save_search(
+                                search_data['name'], 
+                                search_data['filters']
+                            )
+                    except Exception:
+                        pass
         except Exception as e:
             st.error(f"❌ Error initializing: {str(e)}")
             st.info("Please refresh the page or check your API key configuration.")
