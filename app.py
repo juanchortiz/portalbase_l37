@@ -602,16 +602,24 @@ def main():
             st.stop()
     
     # #region agent log - visual debug panel
+    _debug_info["db_path"] = None
+    _debug_info["loaded_cpvs"] = None
     if st.session_state.get('client_initialized') and 'client' in st.session_state:
+        _debug_info["db_path"] = st.session_state.client.db_path
         _debug_info["db_cpvs"] = None
         _biogerm_db = st.session_state.client.load_search('Biogerm')
         if _biogerm_db:
             _debug_info["db_cpvs"] = _biogerm_db.get('cpv_codes', [])
+    # Check session state loaded_filters
+    if st.session_state.get('loaded_filters'):
+        _debug_info["loaded_cpvs"] = st.session_state.loaded_filters.get('cpv_codes', [])
     
     with st.sidebar.expander("🔧 DEBUG", expanded=True):
         st.write(f"**Init this session:** {_debug_info['init_this_session']}")
         st.write(f"**JSON CPVs:** {_debug_info['json_cpvs']}")
         st.write(f"**DB CPVs:** {_debug_info['db_cpvs']}")
+        st.write(f"**Session loaded_filters CPVs:** {_debug_info['loaded_cpvs']}")
+        st.write(f"**DB Path:** {_debug_info['db_path']}")
         if _debug_info['json_cpvs'] != _debug_info['db_cpvs']:
             st.error("⚠️ JSON ≠ DB - sync failed!")
         else:
