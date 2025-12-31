@@ -207,9 +207,16 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
     announcement_url = announcement.get('url', '')
     docs_url = announcement.get('PecasProcedimento', '')
     
-    # Get deadline - prefer direct value, otherwise calculate
+    # Get deadline as epoch ms - prefer direct value, otherwise calculate
+    deadline_epoch_ms = None
     deadline_str = announcement.get('_prazo_directo', '')
-    if not deadline_str:
+    if deadline_str:
+        try:
+            dt = datetime.strptime(deadline_str, '%d/%m/%Y')
+            deadline_epoch_ms = int(dt.timestamp() * 1000)
+        except:
+            pass
+    if not deadline_epoch_ms:
         deadline_days = announcement.get('PrazoPropostas', 0)
         pub_date_str = announcement.get('dataPublicacao', '')
         if pub_date_str and deadline_days:
@@ -217,11 +224,9 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
                 pub_date = datetime.strptime(pub_date_str, '%d/%m/%Y')
                 from datetime import timedelta
                 deadline = pub_date + timedelta(days=int(deadline_days))
-                deadline_str = deadline.strftime('%d/%m/%Y')
+                deadline_epoch_ms = int(deadline.timestamp() * 1000)
             except:
-                deadline_str = f"+{deadline_days} dias"
-    if not deadline_str:
-        deadline_str = 'N/A'
+                pass
     
     # Handle CPVs
     cpvs = announcement.get('CPVs', [])
@@ -235,12 +240,14 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
         "ver_anuncio": announcement_url,
         "documentos": docs_url,
         "numero_de_anuncio": announcement_id,
-        "prazo_de_submissao": deadline_str,
         "descricao_do_procedimento": description[:500],
         "tipo": announcement.get('modeloAnuncio', 'N/A'),
         "codigos_cpv": cpvs_str,
         "entidade_contratante": announcement.get('designacaoEntidade', 'N/A')
     }
+    
+    if deadline_epoch_ms:
+        properties['data_limite_submissao'] = deadline_epoch_ms
     
     # Add publication date if available
     pub_date = convert_date_to_timestamp(pub_date_str)
