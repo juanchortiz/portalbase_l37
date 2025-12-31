@@ -794,16 +794,31 @@ def main():
             try:
                 if st.session_state.client.save_search(search_name, current_filters):
                     st.session_state.current_search_name = search_name
-                    # Load the saved filters to keep them active
                     saved_filters = st.session_state.client.load_search(search_name)
                     if saved_filters:
                         st.session_state.loaded_filters = saved_filters
                     st.success(f"✅ Saved: {search_name}")
                     st.rerun()
                 else:
-                    st.error(f"❌ Failed to save search '{search_name}'. Please check the console for errors.")
+                    st.error(f"❌ Failed to save search '{search_name}'.")
             except Exception as e:
                 st.error(f"❌ Error saving search: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("**📤 Export for Automation:**")
+        st.caption("Copy this JSON to update the workflow filters")
+        current_filters_export = {
+            'keyword': keyword,
+            'fornecedor_nif': fornecedor_nif,
+            'location': location,
+            'cpv_codes': cpv_codes
+        }
+        export_json = {
+            'name': st.session_state.current_search_name or search_name or 'MySearch',
+            'filters': current_filters_export
+        }
+        import json
+        st.code(json.dumps(export_json, indent=2, ensure_ascii=False), language='json')
     
     st.sidebar.markdown("---")
     
