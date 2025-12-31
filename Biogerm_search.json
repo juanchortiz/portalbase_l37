@@ -1,9 +1,16 @@
 {
   "name": "Biogerm",
   "filters": {
-    "keyword": "meios de cultura",
+    "keyword": "meios de cultura, reagentes, ars centro, serviços análises, alimentos análise, legionella, microbiológico",
     "fornecedor_nif": "",
     "location": [],
-    "cpv_codes": []
+    "cpv_codes": [
+      "33696500-0",
+      "33000000-0",
+      "24931250-6",
+      "33600000-6",
+      "90000000-7",
+      "85000000-9"
+    ]
   }
 }
