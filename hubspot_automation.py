@@ -207,18 +207,21 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeli
     announcement_url = announcement.get('url', '')
     docs_url = announcement.get('PecasProcedimento', '')
     
-    # Calculate deadline
-    deadline_days = announcement.get('PrazoPropostas', 0)
-    pub_date_str = announcement.get('dataPublicacao', '')
-    deadline_str = 'N/A'
-    if pub_date_str and deadline_days:
-        try:
-            pub_date = datetime.strptime(pub_date_str, '%d/%m/%Y')
-            from datetime import timedelta
-            deadline = pub_date + timedelta(days=int(deadline_days))
-            deadline_str = deadline.strftime('%d/%m/%Y')
-        except:
-            deadline_str = f"+{deadline_days} dias"
+    # Get deadline - prefer direct value, otherwise calculate
+    deadline_str = announcement.get('_prazo_directo', '')
+    if not deadline_str:
+        deadline_days = announcement.get('PrazoPropostas', 0)
+        pub_date_str = announcement.get('dataPublicacao', '')
+        if pub_date_str and deadline_days:
+            try:
+                pub_date = datetime.strptime(pub_date_str, '%d/%m/%Y')
+                from datetime import timedelta
+                deadline = pub_date + timedelta(days=int(deadline_days))
+                deadline_str = deadline.strftime('%d/%m/%Y')
+            except:
+                deadline_str = f"+{deadline_days} dias"
+    if not deadline_str:
+        deadline_str = 'N/A'
     
     # Handle CPVs
     cpvs = announcement.get('CPVs', [])
