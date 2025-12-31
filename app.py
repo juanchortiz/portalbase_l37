@@ -732,6 +732,11 @@ def main():
             st.error(f"Error loading saved searches: {str(e)}")
             saved_searches = []
         
+        # Show update message if exists
+        if 'update_msg' in st.session_state and st.session_state.update_msg:
+            st.success(st.session_state.update_msg)
+            st.session_state.update_msg = None
+        
         # Show current loaded search
         if st.session_state.current_search_name:
             st.info(f"📂 Loaded: **{st.session_state.current_search_name}**")
@@ -770,16 +775,16 @@ def main():
                                 # Also update GitHub repo for automation persistence
                                 gh_ok, gh_msg = update_search_json_in_github(search_name, current_filters)
                                 if gh_ok:
-                                    st.toast(f"✅ Updated: {search_name} (synced to GitHub)")
+                                    st.session_state['update_msg'] = f"✅ Updated: {search_name} (synced to GitHub)"
                                 else:
-                                    st.toast(f"✅ Updated locally (GitHub: {gh_msg})")
+                                    st.session_state['update_msg'] = f"✅ Updated locally. GitHub: {gh_msg}"
+                                st.rerun()
                             else:
-                                st.error(f"❌ Failed to update saved search '{search_name}'.")
+                                st.error(f"❌ Failed to update. Check console for errors.")
                         except Exception as e:
                             import traceback
-                            st.error(f"❌ Error updating search: {str(e)}")
-                            with st.expander("Error details"):
-                                st.code(traceback.format_exc())
+                            st.error(f"❌ Error: {str(e)}")
+                            st.code(traceback.format_exc())
             with col2:
                 if st.button("❌ Clear", use_container_width=True, help="Clear loaded search"):
                     st.session_state.current_search_name = None
