@@ -88,7 +88,7 @@ def format_price(price_str) -> Optional[float]:
     Convert Portuguese price format to float.
     
     Args:
-        price_str: Price string (may contain Portuguese formatting)
+        price_str: Price string (may contain Portuguese formatting) or number
         
     Returns:
         Float value or None if invalid
@@ -96,9 +96,34 @@ def format_price(price_str) -> Optional[float]:
     if not price_str or price_str == 'N/A':
         return None
     try:
-        # Handle Portuguese format (e.g., "1.234.567,89")
-        cleaned_price = str(price_str).replace('.', '').replace(',', '.')
-        return float(cleaned_price)
+        # If already a number, return it directly
+        if isinstance(price_str, (int, float)):
+            return float(price_str)
+        
+        price_str = str(price_str).strip()
+        
+        # If it's already a valid number string, try direct conversion first
+        try:
+            return float(price_str)
+        except ValueError:
+            pass
+        
+        # Check if it contains comma (Portuguese format: 1.234.567,89)
+        if ',' in price_str:
+            # Portuguese format: remove dots (thousands), replace comma with dot (decimal)
+            cleaned_price = price_str.replace('.', '').replace(',', '.')
+            return float(cleaned_price)
+        else:
+            # No comma - might be English format (1234567.89) or Portuguese without decimals (1.234.567)
+            # If it has dots and no comma, check if it's Portuguese thousands separator
+            # Portuguese format typically has multiple dots (thousands separators)
+            if price_str.count('.') > 1:
+                # Multiple dots = Portuguese thousands format (1.234.567)
+                cleaned_price = price_str.replace('.', '')
+                return float(cleaned_price)
+            else:
+                # Single or no dot = likely English format (1234567.89)
+                return float(price_str)
     except (ValueError, AttributeError):
         return None
 
