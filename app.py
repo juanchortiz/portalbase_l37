@@ -555,92 +555,66 @@ def main():
     
     st.markdown("")
     
-    # #region agent log - always runs
+    # #region agent log - visual debug for Streamlit Cloud
     import pathlib as _pl_always
-    import json as _json_dbg
-    import time as _time_dbg
-    _log_always = _pl_always.Path(__file__).parent / ".cursor" / "debug.log"
-    _log_always.parent.mkdir(exist_ok=True)
-    def _dbg_always(hyp, msg, data=None):
-        with open(_log_always, "a") as _f:
-            _f.write(_json_dbg.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(_time_dbg.time()*1000)}) + "\n")
-    _dbg_always("H5", "App run state", {"client_initialized": st.session_state.get('client_initialized', False), "has_client": 'client' in st.session_state})
+    _debug_info = {"init_this_session": False, "json_cpvs": None, "db_cpvs": None}
+    # Check JSON file content
+    _json_file = _pl_always.Path(__file__).parent / "Biogerm_search.json"
+    if _json_file.exists():
+        try:
+            with open(_json_file) as _jf:
+                _jdata = json.load(_jf)
+                _debug_info["json_cpvs"] = _jdata.get('filters', {}).get('cpv_codes', [])
+        except: pass
     # #endregion
     
     # Initialize API client lazily
     if not st.session_state.client_initialized:
+        _debug_info["init_this_session"] = True
         try:
             with st.spinner('Initializing database...'):
                 ACCESS_TOKEN = get_api_key()
                 st.session_state.client = CachedBaseAPIClient(ACCESS_TOKEN)
                 st.session_state.client_initialized = True
                 
-                # #region agent log
-                import pathlib as _pl
-                import json as _json_init
-                import time as _time_init
-                _log_path = _pl.Path(__file__).parent / ".cursor" / "debug.log"
-                _log_path.parent.mkdir(exist_ok=True)
-                def _dbg(hyp, msg, data=None):
-                    with open(_log_path, "a") as _f:
-                        _f.write(_json_init.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(_time_init.time()*1000)}) + "\n")
-                # #endregion
-                
                 # Sync JSON search files to database (for Streamlit Cloud persistence)
-                import glob
-                app_dir = _pl.Path(__file__).parent
+                app_dir = _pl_always.Path(__file__).parent
                 json_files = list(app_dir.glob("*_search.json"))
-                
-                # #region agent log
-                _dbg("H1", "JSON files search", {"app_dir": str(app_dir), "files_found": [str(f) for f in json_files], "count": len(json_files)})
-                # #endregion
                 
                 for json_file in json_files:
                     try:
                         with open(json_file, 'r') as f:
                             search_data = json.load(f)
                         
-                        # #region agent log
-                        _dbg("H1", "JSON file read", {"file": str(json_file), "name": search_data.get('name'), "cpv_count": len(search_data.get('filters',{}).get('cpv_codes',[]))})
-                        # #endregion
-                        
                         if 'name' in search_data and 'filters' in search_data:
-                            # #region agent log
-                            _dbg("H2", "Before save_search", {"name": search_data['name'], "cpvs": search_data['filters'].get('cpv_codes',[]), "db_path": st.session_state.client.db_path})
-                            # #endregion
-                            
                             save_result = st.session_state.client.save_search(
                                 search_data['name'], 
                                 search_data['filters']
                             )
-                            
-                            # #region agent log
-                            _dbg("H2", "After save_search", {"name": search_data['name'], "result": save_result})
-                            # #endregion
-                            
-                            # Verify immediately after save
-                            verify_data = st.session_state.client.load_search(search_data['name'])
-                            
-                            # #region agent log
-                            _dbg("H3", "Verify after save", {"name": search_data['name'], "loaded_cpvs": verify_data.get('cpv_codes',[]) if verify_data else None})
-                            # #endregion
-                            
                             cpvs = search_data['filters'].get('cpv_codes', [])
-                            st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs (verify: {len(verify_data.get('cpv_codes',[])) if verify_data else 'None'})")
+                            st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs (ok={save_result})")
                     except Exception as e:
-                        # #region agent log
-                        _dbg("H2", "Exception in sync", {"file": str(json_file), "error": str(e)})
-                        # #endregion
                         st.warning(f"Error syncing {json_file}: {e}")
         except Exception as e:
             st.error(f"❌ Error initializing: {str(e)}")
             st.info("Please refresh the page or check your API key configuration.")
             st.stop()
     
-    # #region agent log - check DB state after init
+    # #region agent log - visual debug panel
     if st.session_state.get('client_initialized') and 'client' in st.session_state:
-        _biogerm_check = st.session_state.client.load_search('Biogerm')
-        _dbg_always("H3", "Current DB state for Biogerm", {"cpvs": _biogerm_check.get('cpv_codes',[]) if _biogerm_check else None, "keyword": _biogerm_check.get('keyword','') if _biogerm_check else None, "db_path": st.session_state.client.db_path})
+        _debug_info["db_cpvs"] = None
+        _biogerm_db = st.session_state.client.load_search('Biogerm')
+        if _biogerm_db:
+            _debug_info["db_cpvs"] = _biogerm_db.get('cpv_codes', [])
+    
+    with st.sidebar.expander("🔧 DEBUG", expanded=True):
+        st.write(f"**Init this session:** {_debug_info['init_this_session']}")
+        st.write(f"**JSON CPVs:** {_debug_info['json_cpvs']}")
+        st.write(f"**DB CPVs:** {_debug_info['db_cpvs']}")
+        if _debug_info['json_cpvs'] != _debug_info['db_cpvs']:
+            st.error("⚠️ JSON ≠ DB - sync failed!")
+        else:
+            st.success("✓ JSON = DB")
     # #endregion
     
     # Sidebar - Filters
@@ -882,16 +856,6 @@ def main():
             with col1:
                 if st.button("📂 Load", disabled=not selected_search, use_container_width=True):
                     loaded_filters = st.session_state.client.load_search(selected_search)
-                    
-                    # #region agent log
-                    import pathlib as _pl2
-                    import json as _json2
-                    import time as _t2
-                    _log_path2 = _pl2.Path(__file__).parent / ".cursor" / "debug.log"
-                    with open(_log_path2, "a") as _f2:
-                        _f2.write(_json2.dumps({"hypothesisId":"H4","message":"Load button clicked","data":{"search": selected_search, "db_path": st.session_state.client.db_path, "cpvs": loaded_filters.get('cpv_codes',[]) if loaded_filters else None},"timestamp":int(_t2.time()*1000)}) + "\n")
-                    # #endregion
-                    
                     if loaded_filters:
                         st.session_state.loaded_filters = loaded_filters
                         st.session_state.current_search_name = selected_search
