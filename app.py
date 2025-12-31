@@ -442,8 +442,8 @@ def announcements_to_dataframe(announcements):
     for announcement in announcements:
         announcement_id = announcement.get('nAnuncio', 'N/A')
         
-        # Create Base.gov.pt link
-        announcement_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=anuncios&id={announcement_id}" if announcement_id != 'N/A' else ''
+        # Use the official DR (Diário da República) URL from the API
+        announcement_url = announcement.get('url', '')
         docs_url = announcement.get('PecasProcedimento', '')
         
         # Calculate deadline date
@@ -555,23 +555,12 @@ def main():
     
     st.markdown("")
     
-    # #region agent log - visual debug for Streamlit Cloud
+    # Sync JSON search files on every run to ensure persistence
     import pathlib as _pl_always
-    import json as _json_sync  # Explicit import to avoid scope issues
-    _debug_info = {"init_this_session": False, "json_cpvs": None, "db_cpvs": None}
-    # Check JSON file content
-    _json_file = _pl_always.Path(__file__).parent / "Biogerm_search.json"
-    if _json_file.exists():
-        try:
-            with open(_json_file) as _jf:
-                _jdata = _json_sync.load(_jf)
-                _debug_info["json_cpvs"] = _jdata.get('filters', {}).get('cpv_codes', [])
-        except: pass
-    # #endregion
+    import json as _json_sync
     
     # Initialize API client lazily
     if not st.session_state.client_initialized:
-        _debug_info["init_this_session"] = True
         try:
             with st.spinner('Initializing database...'):
                 ACCESS_TOKEN = get_api_key()
@@ -580,71 +569,35 @@ def main():
                 
                 # Sync JSON search files to database (for Streamlit Cloud persistence)
                 app_dir = _pl_always.Path(__file__).parent
-                json_files = list(app_dir.glob("*_search.json"))
-                
-                for json_file in json_files:
+                for json_file in app_dir.glob("*_search.json"):
                     try:
                         with open(json_file, 'r') as f:
                             search_data = _json_sync.load(f)
-                        
                         if 'name' in search_data and 'filters' in search_data:
-                            save_result = st.session_state.client.save_search(
-                                search_data['name'], 
-                                search_data['filters']
-                            )
-                            cpvs = search_data['filters'].get('cpv_codes', [])
-                            st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs (ok={save_result})")
-                    except Exception as e:
-                        st.warning(f"Error syncing {json_file}: {e}")
+                            st.session_state.client.save_search(search_data['name'], search_data['filters'])
+                    except Exception:
+                        pass
         except Exception as e:
             st.error(f"❌ Error initializing: {str(e)}")
-            st.info("Please refresh the page or check your API key configuration.")
             st.stop()
     
-    # #region agent log - visual debug panel
-    _debug_info["db_path"] = None
-    _debug_info["loaded_cpvs"] = None
+    # Force re-sync from JSON files on every run (ensures persistence on Streamlit Cloud)
     if st.session_state.get('client_initialized') and 'client' in st.session_state:
-        _debug_info["db_path"] = st.session_state.client.db_path
-        _debug_info["db_cpvs"] = None
-        _biogerm_db = st.session_state.client.load_search('Biogerm')
-        if _biogerm_db:
-            _debug_info["db_cpvs"] = _biogerm_db.get('cpv_codes', [])
-    # Check session state loaded_filters
-    if st.session_state.get('loaded_filters'):
-        _debug_info["loaded_cpvs"] = st.session_state.loaded_filters.get('cpv_codes', [])
-    
-    # Force re-sync if JSON ≠ DB (even if already initialized)
-    if _debug_info['json_cpvs'] is not None and _debug_info['db_cpvs'] != _debug_info['json_cpvs']:
-        if st.session_state.get('client_initialized') and 'client' in st.session_state:
-            # Re-sync from JSON
-            _json_file_resync = _pl_always.Path(__file__).parent / "Biogerm_search.json"
-            if _json_file_resync.exists():
-                try:
-                    with open(_json_file_resync) as _jf2:
-                        _jdata2 = _json_sync.load(_jf2)
-                    if 'name' in _jdata2 and 'filters' in _jdata2:
-                        st.session_state.client.save_search(_jdata2['name'], _jdata2['filters'])
-                        _debug_info['db_cpvs'] = _jdata2['filters'].get('cpv_codes', [])
-                        # Also clear loaded_filters if it's for this search
-                        if st.session_state.get('current_search_name') == _jdata2['name']:
-                            st.session_state.loaded_filters = _jdata2['filters']
-                            _debug_info['loaded_cpvs'] = _jdata2['filters'].get('cpv_codes', [])
-                        st.toast(f"🔄 Re-synced {_jdata2['name']} from JSON")
-                except Exception as e:
-                    st.warning(f"Re-sync failed: {e}")
-    
-    with st.sidebar.expander("🔧 DEBUG", expanded=True):
-        st.write(f"**Init this session:** {_debug_info['init_this_session']}")
-        st.write(f"**JSON CPVs:** {_debug_info['json_cpvs']}")
-        st.write(f"**DB CPVs:** {_debug_info['db_cpvs']}")
-        st.write(f"**Session loaded_filters CPVs:** {_debug_info['loaded_cpvs']}")
-        st.write(f"**DB Path:** {_debug_info['db_path']}")
-        if _debug_info['json_cpvs'] != _debug_info['db_cpvs']:
-            st.error("⚠️ JSON ≠ DB - sync failed!")
-        else:
-            st.success("✓ JSON = DB")
-    # #endregion
+        app_dir = _pl_always.Path(__file__).parent
+        for json_file in app_dir.glob("*_search.json"):
+            try:
+                with open(json_file, 'r') as f:
+                    search_data = _json_sync.load(f)
+                if 'name' in search_data and 'filters' in search_data:
+                    db_data = st.session_state.client.load_search(search_data['name'])
+                    json_cpvs = search_data['filters'].get('cpv_codes', [])
+                    db_cpvs = db_data.get('cpv_codes', []) if db_data else []
+                    if json_cpvs != db_cpvs:
+                        st.session_state.client.save_search(search_data['name'], search_data['filters'])
+                        if st.session_state.get('current_search_name') == search_data['name']:
+                            st.session_state.loaded_filters = search_data['filters']
+            except Exception:
+                pass
     
     # Sidebar - Filters
     st.sidebar.header("🔍 Filtros")
