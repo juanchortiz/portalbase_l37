@@ -565,7 +565,9 @@ def main():
                 
                 # Sync JSON search files to database (for Streamlit Cloud persistence)
                 import glob
-                json_files = glob.glob("*_search.json")
+                import pathlib
+                app_dir = pathlib.Path(__file__).parent
+                json_files = list(app_dir.glob("*_search.json"))
                 for json_file in json_files:
                     try:
                         with open(json_file, 'r') as f:
@@ -575,7 +577,6 @@ def main():
                                 search_data['name'], 
                                 search_data['filters']
                             )
-                            # Debug: show what was synced
                             cpvs = search_data['filters'].get('cpv_codes', [])
                             st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs")
                     except Exception as e:
