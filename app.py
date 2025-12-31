@@ -563,23 +563,61 @@ def main():
                 st.session_state.client = CachedBaseAPIClient(ACCESS_TOKEN)
                 st.session_state.client_initialized = True
                 
+                # #region agent log
+                import pathlib as _pl
+                _log_path = _pl.Path(__file__).parent / ".cursor" / "debug.log"
+                _log_path.parent.mkdir(exist_ok=True)
+                def _dbg(hyp, msg, data=None):
+                    import time
+                    with open(_log_path, "a") as _f:
+                        _f.write(json.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(time.time()*1000)}) + "\n")
+                # #endregion
+                
                 # Sync JSON search files to database (for Streamlit Cloud persistence)
                 import glob
-                import pathlib
-                app_dir = pathlib.Path(__file__).parent
+                app_dir = _pl.Path(__file__).parent
                 json_files = list(app_dir.glob("*_search.json"))
+                
+                # #region agent log
+                _dbg("H1", "JSON files search", {"app_dir": str(app_dir), "files_found": [str(f) for f in json_files], "count": len(json_files)})
+                # #endregion
+                
                 for json_file in json_files:
                     try:
                         with open(json_file, 'r') as f:
                             search_data = json.load(f)
+                        
+                        # #region agent log
+                        _dbg("H1", "JSON file read", {"file": str(json_file), "name": search_data.get('name'), "cpv_count": len(search_data.get('filters',{}).get('cpv_codes',[]))})
+                        # #endregion
+                        
                         if 'name' in search_data and 'filters' in search_data:
-                            st.session_state.client.save_search(
+                            # #region agent log
+                            _dbg("H2", "Before save_search", {"name": search_data['name'], "cpvs": search_data['filters'].get('cpv_codes',[]), "db_path": st.session_state.client.db_path})
+                            # #endregion
+                            
+                            save_result = st.session_state.client.save_search(
                                 search_data['name'], 
                                 search_data['filters']
                             )
+                            
+                            # #region agent log
+                            _dbg("H2", "After save_search", {"name": search_data['name'], "result": save_result})
+                            # #endregion
+                            
+                            # Verify immediately after save
+                            verify_data = st.session_state.client.load_search(search_data['name'])
+                            
+                            # #region agent log
+                            _dbg("H3", "Verify after save", {"name": search_data['name'], "loaded_cpvs": verify_data.get('cpv_codes',[]) if verify_data else None})
+                            # #endregion
+                            
                             cpvs = search_data['filters'].get('cpv_codes', [])
-                            st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs")
+                            st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs (verify: {len(verify_data.get('cpv_codes',[])) if verify_data else 'None'})")
                     except Exception as e:
+                        # #region agent log
+                        _dbg("H2", "Exception in sync", {"file": str(json_file), "error": str(e)})
+                        # #endregion
                         st.warning(f"Error syncing {json_file}: {e}")
         except Exception as e:
             st.error(f"❌ Error initializing: {str(e)}")
@@ -825,6 +863,15 @@ def main():
             with col1:
                 if st.button("📂 Load", disabled=not selected_search, use_container_width=True):
                     loaded_filters = st.session_state.client.load_search(selected_search)
+                    
+                    # #region agent log
+                    import pathlib as _pl2
+                    _log_path2 = _pl2.Path(__file__).parent / ".cursor" / "debug.log"
+                    import time as _t2
+                    with open(_log_path2, "a") as _f2:
+                        _f2.write(json.dumps({"hypothesisId":"H4","message":"Load button clicked","data":{"search": selected_search, "db_path": st.session_state.client.db_path, "cpvs": loaded_filters.get('cpv_codes',[]) if loaded_filters else None},"timestamp":int(_t2.time()*1000)}) + "\n")
+                    # #endregion
+                    
                     if loaded_filters:
                         st.session_state.loaded_filters = loaded_filters
                         st.session_state.current_search_name = selected_search
