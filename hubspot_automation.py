@@ -290,10 +290,12 @@ def create_company_from_entity(nif: str, entity_name: str, api_token: str, entit
         "Content-Type": "application/json"
     }
     
-    # Build company properties
+    # Build company properties - fill both NIF fields
     properties = {
         "name": entity_name,
-        "nif": str(nif)
+        "nif": str(nif),
+        "num_contrib": str(nif),  # Número de Contribuinte (NIF) - displayed in UI
+        "observacoes_adicionais": "Entidade pública - Dados importados de Base.gov.pt"
     }
     
     # Try to enrich with API data
