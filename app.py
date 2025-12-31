@@ -557,12 +557,13 @@ def main():
     
     # #region agent log - always runs
     import pathlib as _pl_always
+    import json as _json_dbg
+    import time as _time_dbg
     _log_always = _pl_always.Path(__file__).parent / ".cursor" / "debug.log"
     _log_always.parent.mkdir(exist_ok=True)
     def _dbg_always(hyp, msg, data=None):
-        import time
         with open(_log_always, "a") as _f:
-            _f.write(json.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(time.time()*1000)}) + "\n")
+            _f.write(_json_dbg.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(_time_dbg.time()*1000)}) + "\n")
     _dbg_always("H5", "App run state", {"client_initialized": st.session_state.get('client_initialized', False), "has_client": 'client' in st.session_state})
     # #endregion
     
@@ -576,12 +577,13 @@ def main():
                 
                 # #region agent log
                 import pathlib as _pl
+                import json as _json_init
+                import time as _time_init
                 _log_path = _pl.Path(__file__).parent / ".cursor" / "debug.log"
                 _log_path.parent.mkdir(exist_ok=True)
                 def _dbg(hyp, msg, data=None):
-                    import time
                     with open(_log_path, "a") as _f:
-                        _f.write(json.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(time.time()*1000)}) + "\n")
+                        _f.write(_json_init.dumps({"hypothesisId":hyp,"message":msg,"data":data,"timestamp":int(_time_init.time()*1000)}) + "\n")
                 # #endregion
                 
                 # Sync JSON search files to database (for Streamlit Cloud persistence)
@@ -636,7 +638,7 @@ def main():
             st.stop()
     
     # #region agent log - check DB state after init
-    if st.session_state.client_initialized and 'client' in st.session_state:
+    if st.session_state.get('client_initialized') and 'client' in st.session_state:
         _biogerm_check = st.session_state.client.load_search('Biogerm')
         _dbg_always("H3", "Current DB state for Biogerm", {"cpvs": _biogerm_check.get('cpv_codes',[]) if _biogerm_check else None, "keyword": _biogerm_check.get('keyword','') if _biogerm_check else None, "db_path": st.session_state.client.db_path})
     # #endregion
@@ -883,10 +885,11 @@ def main():
                     
                     # #region agent log
                     import pathlib as _pl2
-                    _log_path2 = _pl2.Path(__file__).parent / ".cursor" / "debug.log"
+                    import json as _json2
                     import time as _t2
+                    _log_path2 = _pl2.Path(__file__).parent / ".cursor" / "debug.log"
                     with open(_log_path2, "a") as _f2:
-                        _f2.write(json.dumps({"hypothesisId":"H4","message":"Load button clicked","data":{"search": selected_search, "db_path": st.session_state.client.db_path, "cpvs": loaded_filters.get('cpv_codes',[]) if loaded_filters else None},"timestamp":int(_t2.time()*1000)}) + "\n")
+                        _f2.write(_json2.dumps({"hypothesisId":"H4","message":"Load button clicked","data":{"search": selected_search, "db_path": st.session_state.client.db_path, "cpvs": loaded_filters.get('cpv_codes',[]) if loaded_filters else None},"timestamp":int(_t2.time()*1000)}) + "\n")
                     # #endregion
                     
                     if loaded_filters:
