@@ -301,15 +301,41 @@ def create_company_from_entity(nif: str, entity_name: str, api_token: str, entit
         entity_info = get_entity_info_from_api(nif)
     
     if entity_info:
-        # Use correct field names from Base API
+        # Country
         if entity_info.get('descPais'):
             properties['country'] = entity_info.get('descPais', 'Portugal')
-        # Add contract statistics as description
+        
+        # Annual revenue (as contracting entity) - use annualrevenue not total_revenue
+        tot_valor_adjudicante = entity_info.get('totAdjudicanteValorContratIni', 0)
+        if tot_valor_adjudicante:
+            try:
+                properties['annualrevenue'] = str(int(float(tot_valor_adjudicante)))
+            except:
+                pass
+        
+        # Build comprehensive description with contract statistics
+        desc_parts = []
         num_contratos = entity_info.get('numContratos', 0)
-        tot_valor = entity_info.get('totAdjudicanteValorContratIni', 0)
-        if num_contratos or tot_valor:
-            desc = f"Total contratos: {num_contratos}\nValor total adjudicante: €{tot_valor:,.2f}"
-            properties['description'] = desc
+        tot_adjudicante = entity_info.get('totAdjudicante', 0)
+        tot_adjudicatario = entity_info.get('totAdjudicatario', 0)
+        tot_valor_contrat = entity_info.get('totValorContratIni', 0)
+        
+        desc_parts.append("📊 Dados de Contratação Pública (Base.gov.pt)")
+        if num_contratos:
+            desc_parts.append(f"Total contratos: {num_contratos:,}")
+        if tot_adjudicante:
+            desc_parts.append(f"Como adjudicante: {tot_adjudicante:,} contratos (€{tot_valor_adjudicante:,.2f})")
+        if tot_adjudicatario:
+            desc_parts.append(f"Como adjudicatário: {tot_adjudicatario:,} contratos (€{tot_valor_contrat:,.2f})")
+        
+        if len(desc_parts) > 1:
+            properties['description'] = '\n'.join(desc_parts)
+        
+        # Set type as PROSPECT for new leads
+        properties['type'] = 'PROSPECT'
+        
+        # Set industry as Hospital/Healthcare
+        properties['industry'] = 'HOSPITAL_HEALTH_CARE'
     
     payload = {"properties": properties}
     
