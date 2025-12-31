@@ -614,6 +614,26 @@ def main():
     if st.session_state.get('loaded_filters'):
         _debug_info["loaded_cpvs"] = st.session_state.loaded_filters.get('cpv_codes', [])
     
+    # Force re-sync if JSON ≠ DB (even if already initialized)
+    if _debug_info['json_cpvs'] is not None and _debug_info['db_cpvs'] != _debug_info['json_cpvs']:
+        if st.session_state.get('client_initialized') and 'client' in st.session_state:
+            # Re-sync from JSON
+            _json_file_resync = _pl_always.Path(__file__).parent / "Biogerm_search.json"
+            if _json_file_resync.exists():
+                try:
+                    with open(_json_file_resync) as _jf2:
+                        _jdata2 = _json_sync.load(_jf2)
+                    if 'name' in _jdata2 and 'filters' in _jdata2:
+                        st.session_state.client.save_search(_jdata2['name'], _jdata2['filters'])
+                        _debug_info['db_cpvs'] = _jdata2['filters'].get('cpv_codes', [])
+                        # Also clear loaded_filters if it's for this search
+                        if st.session_state.get('current_search_name') == _jdata2['name']:
+                            st.session_state.loaded_filters = _jdata2['filters']
+                            _debug_info['loaded_cpvs'] = _jdata2['filters'].get('cpv_codes', [])
+                        st.toast(f"🔄 Re-synced {_jdata2['name']} from JSON")
+                except Exception as e:
+                    st.warning(f"Re-sync failed: {e}")
+    
     with st.sidebar.expander("🔧 DEBUG", expanded=True):
         st.write(f"**Init this session:** {_debug_info['init_this_session']}")
         st.write(f"**JSON CPVs:** {_debug_info['json_cpvs']}")
