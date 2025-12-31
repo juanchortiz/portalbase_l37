@@ -565,7 +565,8 @@ def main():
                 
                 # Sync JSON search files to database (for Streamlit Cloud persistence)
                 import glob
-                for json_file in glob.glob("*_search.json"):
+                json_files = glob.glob("*_search.json")
+                for json_file in json_files:
                     try:
                         with open(json_file, 'r') as f:
                             search_data = json.load(f)
@@ -574,8 +575,11 @@ def main():
                                 search_data['name'], 
                                 search_data['filters']
                             )
-                    except Exception:
-                        pass
+                            # Debug: show what was synced
+                            cpvs = search_data['filters'].get('cpv_codes', [])
+                            st.toast(f"📥 Synced {search_data['name']}: {len(cpvs)} CPVs")
+                    except Exception as e:
+                        st.warning(f"Error syncing {json_file}: {e}")
         except Exception as e:
             st.error(f"❌ Error initializing: {str(e)}")
             st.info("Please refresh the page or check your API key configuration.")
@@ -821,13 +825,12 @@ def main():
                 if st.button("📂 Load", disabled=not selected_search, use_container_width=True):
                     loaded_filters = st.session_state.client.load_search(selected_search)
                     if loaded_filters:
-                        # Store loaded filters to apply them
                         st.session_state.loaded_filters = loaded_filters
                         st.session_state.current_search_name = selected_search
-                        # Update search type if saved in search
                         if loaded_filters.get('search_type'):
                             st.session_state.search_type = loaded_filters.get('search_type', 'contracts')
-                        st.success(f"Loaded: {selected_search}")
+                        cpv_count = len(loaded_filters.get('cpv_codes', []))
+                        st.success(f"Loaded: {selected_search} ({cpv_count} CPVs)")
                         st.rerun()
             with col2:
                 if st.button("🗑️ Delete", disabled=not selected_search, use_container_width=True):
