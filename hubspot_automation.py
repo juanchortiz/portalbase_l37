@@ -60,6 +60,66 @@ def get_hubspot_token() -> str:
 
 HUBSPOT_API_URL = "https://api.hubapi.com/crm/v3/objects/deals"
 
+# Pipeline and stage configuration
+PIPELINE_NAME = "concursos"
+STAGE_NAME = "Alerta de publicação da plataforma"
+
+# Cache for pipeline/stage IDs (to avoid repeated API calls)
+_pipeline_cache = {}
+
+
+def get_pipeline_and_stage_ids(api_token: str) -> tuple:
+    """
+    Get the pipeline ID and stage ID by their names.
+    
+    Returns:
+        Tuple of (pipeline_id, stage_id) or (None, None) if not found
+    """
+    global _pipeline_cache
+    
+    cache_key = f"{PIPELINE_NAME}:{STAGE_NAME}"
+    if cache_key in _pipeline_cache:
+        return _pipeline_cache[cache_key]
+    
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        # Get all deal pipelines
+        url = "https://api.hubapi.com/crm/v3/pipelines/deals"
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        pipelines = response.json().get('results', [])
+        
+        pipeline_id = None
+        stage_id = None
+        
+        for pipeline in pipelines:
+            if pipeline.get('label', '').lower() == PIPELINE_NAME.lower():
+                pipeline_id = pipeline.get('id')
+                # Find the stage
+                for stage in pipeline.get('stages', []):
+                    if stage.get('label', '').lower() == STAGE_NAME.lower():
+                        stage_id = stage.get('id')
+                        break
+                break
+        
+        if pipeline_id and stage_id:
+            _pipeline_cache[cache_key] = (pipeline_id, stage_id)
+            print(f"✓ Found pipeline '{PIPELINE_NAME}' (ID: {pipeline_id})")
+            print(f"✓ Found stage '{STAGE_NAME}' (ID: {stage_id})")
+            return (pipeline_id, stage_id)
+        else:
+            print(f"⚠️ Pipeline '{PIPELINE_NAME}' or stage '{STAGE_NAME}' not found")
+            print(f"   Available pipelines: {[p.get('label') for p in pipelines]}")
+            return (None, None)
+            
+    except Exception as e:
+        print(f"⚠️ Error fetching pipelines: {e}")
+        return (None, None)
+
 
 def convert_date_to_timestamp(date_str: str) -> Optional[int]:
     """
@@ -128,12 +188,14 @@ def format_price(price_str) -> Optional[float]:
         return None
 
 
-def convert_announcement_to_deal_properties(announcement: Dict[str, Any]) -> Dict[str, Any]:
+def convert_announcement_to_deal_properties(announcement: Dict[str, Any], pipeline_id: str = None, stage_id: str = None) -> Dict[str, Any]:
     """
     Convert announcement data to HubSpot deal properties.
     
     Args:
         announcement: Announcement dictionary from API
+        pipeline_id: HubSpot pipeline ID (optional)
+        stage_id: HubSpot stage ID (optional)
         
     Returns:
         Dictionary of HubSpot deal properties
@@ -141,8 +203,8 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any]) -> Dic
     announcement_id = announcement.get('nAnuncio', 'N/A')
     description = announcement.get('descricaoAnuncio', 'N/A')
     
-    # Create Base.gov.pt link
-    announcement_url = f"https://www.base.gov.pt/Base4/pt/detalhe/?type=anuncios&id={announcement_id}" if announcement_id != 'N/A' else ''
+    # Use official DR URL from API
+    announcement_url = announcement.get('url', '')
     docs_url = announcement.get('PecasProcedimento', '')
     
     # Calculate deadline
@@ -161,17 +223,17 @@ def convert_announcement_to_deal_properties(announcement: Dict[str, Any]) -> Dic
     # Handle CPVs
     cpvs = announcement.get('CPVs', [])
     cpvs = cpvs if isinstance(cpvs, list) else [str(cpvs)]
-    cpvs_str = ', '.join(str(x) for x in cpvs[:5])  # Limit to 5 CPVs
+    cpvs_str = ', '.join(str(x) for x in cpvs[:5])
     
     properties = {
-        "dealname": description[:100] if description != 'N/A' else f"Anúncio {announcement_id}",  # Deal name
-        "dealstage": "appointmentscheduled",  # Default stage
-        "pipeline": "default",  # Default pipeline
+        "dealname": description[:100] if description != 'N/A' else f"Anúncio {announcement_id}",
+        "dealstage": stage_id if stage_id else "appointmentscheduled",
+        "pipeline": pipeline_id if pipeline_id else "default",
         "ver_anuncio": announcement_url,
         "documentos": docs_url,
         "numero_de_anuncio": announcement_id,
         "prazo_de_submissao": deadline_str,
-        "descricao_do_procedimento": description[:500],  # Limit length
+        "descricao_do_procedimento": description[:500],
         "tipo": announcement.get('modeloAnuncio', 'N/A'),
         "codigos_cpv": cpvs_str,
         "entidade_contratante": announcement.get('designacaoEntidade', 'N/A')
@@ -207,7 +269,10 @@ def create_deal_from_announcement(
     if api_token is None:
         api_token = get_hubspot_token()
     
-    properties = convert_announcement_to_deal_properties(announcement)
+    # Get pipeline and stage IDs
+    pipeline_id, stage_id = get_pipeline_and_stage_ids(api_token)
+    
+    properties = convert_announcement_to_deal_properties(announcement, pipeline_id, stage_id)
     
     payload = {
         "properties": properties
