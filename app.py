@@ -557,13 +557,14 @@ def main():
     
     # #region agent log - visual debug for Streamlit Cloud
     import pathlib as _pl_always
+    import json as _json_sync  # Explicit import to avoid scope issues
     _debug_info = {"init_this_session": False, "json_cpvs": None, "db_cpvs": None}
     # Check JSON file content
     _json_file = _pl_always.Path(__file__).parent / "Biogerm_search.json"
     if _json_file.exists():
         try:
             with open(_json_file) as _jf:
-                _jdata = json.load(_jf)
+                _jdata = _json_sync.load(_jf)
                 _debug_info["json_cpvs"] = _jdata.get('filters', {}).get('cpv_codes', [])
         except: pass
     # #endregion
@@ -584,7 +585,7 @@ def main():
                 for json_file in json_files:
                     try:
                         with open(json_file, 'r') as f:
-                            search_data = json.load(f)
+                            search_data = _json_sync.load(f)
                         
                         if 'name' in search_data and 'filters' in search_data:
                             save_result = st.session_state.client.save_search(
