@@ -706,7 +706,6 @@ def main():
                         
                         try:
                             # Always use save_search since it now uses INSERT OR REPLACE
-                            # This is more reliable than update_search
                             success = st.session_state.client.save_search(search_name, current_filters)
                             
                             if success:
@@ -714,15 +713,14 @@ def main():
                                 updated_filters = st.session_state.client.load_search(search_name)
                                 if updated_filters:
                                     st.session_state.loaded_filters = updated_filters
-                                st.success(f"✅ Updated: {search_name}")
-                                st.rerun()
+                                st.toast(f"✅ Updated: {search_name}")
                             else:
                                 st.error(f"❌ Failed to update saved search '{search_name}'.")
                                 with st.expander("Debug info"):
                                     st.write(f"Search exists in DB: {search_exists}")
                                     st.write(f"Search name: '{search_name}'")
-                                    st.write(f"All searches: {[s['name'] for s in all_searches]}")
-                                    st.write(f"Filters: {current_filters}")
+                                    st.write(f"CPV codes being saved: {cpv_codes}")
+                                    st.write(f"All filters: {current_filters}")
                         except Exception as e:
                             import traceback
                             error_details = traceback.format_exc()
