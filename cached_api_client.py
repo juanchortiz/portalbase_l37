@@ -397,30 +397,108 @@ class CachedBaseAPIClient:
     
     def save_search(self, name: str, filters: Dict[str, Any]) -> bool:
         """
-        Save a search with a name.
+        Save a search with a name. If the search already exists, it will be updated.
         
         Args:
             name: Name for the saved search
             filters: Dictionary of filter settings
-            
+        
         Returns:
-            True if successful, False if name already exists
+            True if successful, False on error
         """
+        if not name or not name.strip():
+            return False
+        
+        name = name.strip()
+        conn = None
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            filters_json = json.dumps(filters, ensure_ascii=False)
+            
             cursor.execute("""
-                INSERT INTO saved_searches (name, filters)
-                VALUES (?, ?)
-            """, (name, json.dumps(filters)))
+                INSERT OR REPLACE INTO saved_searches (name, filters, last_used)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, (name, filters_json))
             
             conn.commit()
-            conn.close()
             return True
-        except sqlite3.IntegrityError:
-            # Name already exists
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            print(f"Error saving search '{name}': {e}")
+            import traceback
+            traceback.print_exc()
             return False
+        finally:
+            if conn:
+                conn.close()
+
+    def update_search(self, name: str, filters: Dict[str, Any]) -> bool:
+        """
+        Update an existing saved search with new filters.
+
+        Args:
+            name: Name of the saved search to update
+            filters: Dictionary of filter settings
+
+        Returns:
+            True if the search was updated, False if not found or error occurred
+        """
+        if not name or not name.strip():
+            return False
+        
+        name = name.strip()
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Check if search exists
+            cursor.execute("""
+                SELECT id FROM saved_searches
+                WHERE name = ?
+            """, (name,))
+            result = cursor.fetchone()
+
+            if not result:
+                return False
+
+            # Serialize filters to JSON
+            try:
+                filters_json = json.dumps(filters, ensure_ascii=False)
+            except (TypeError, ValueError) as e:
+                print(f"Error serializing filters to JSON: {e}")
+                return False
+
+            # Update the search
+            cursor.execute("""
+                UPDATE saved_searches
+                SET filters = ?, last_used = CURRENT_TIMESTAMP
+                WHERE name = ?
+            """, (filters_json, name))
+
+            if cursor.rowcount == 0:
+                return False
+
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            if conn:
+                conn.rollback()
+            print(f"Database error updating search '{name}': {e}")
+            return False
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            print(f"Error updating search '{name}': {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            if conn:
+                conn.close()
     
     def get_saved_searches(self) -> List[Dict[str, Any]]:
         """

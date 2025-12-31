@@ -33,8 +33,9 @@ def filter_contracts(contracts, filters):
     filtered = contracts
     
     # Keyword filter (supports comma-separated keywords)
-    if filters.get('keyword'):
-        keywords = [kw.strip().lower() for kw in filters['keyword'].split(',') if kw.strip()]
+    keyword_filter = filters.get('keyword', '')
+    if keyword_filter:
+        keywords = [kw.strip().lower() for kw in keyword_filter.split(',') if kw.strip()]
         filtered = [
             c for c in filtered
             if any(
@@ -42,8 +43,9 @@ def filter_contracts(contracts, filters):
                 keyword in c.get('objectoContrato', '').lower() or
                 keyword in c.get('descContrato', '').lower() or
                 keyword in ' '.join(str(x) for x in (c.get('cpv', []) if isinstance(c.get('cpv'), list) else [])).lower() or
-                # Announcement fields
+                # Announcement fields - search in description (title/description) and type
                 keyword in c.get('descricaoAnuncio', '').lower() or
+                keyword in c.get('modeloAnuncio', '').lower() or
                 keyword in ' '.join(str(x) for x in (c.get('CPVs', []) if isinstance(c.get('CPVs'), list) else [])).lower()
                 for keyword in keywords
             )

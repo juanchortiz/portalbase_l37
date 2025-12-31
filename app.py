@@ -73,6 +73,21 @@ def extract_cpv_codes_from_selection(selected_options):
         return []
     return [option.split(' - ')[0] for option in selected_options]
 
+def normalize_cpv_codes(raw_codes):
+    """Normalize stored CPV values into plain CPV codes."""
+    if not raw_codes:
+        return []
+    normalized = []
+    for value in raw_codes:
+        if not value:
+            continue
+        if isinstance(value, str):
+            parts = value.split(' - ')
+            normalized.append(parts[0].strip())
+        else:
+            normalized.append(str(value))
+    return normalized
+
 # Common locations in Portugal (from database analysis)
 COMMON_LOCATIONS = [
     "All",
@@ -226,8 +241,9 @@ def filter_contracts(contracts, filters):
     filtered = contracts
     
     # Keyword filter (supports comma-separated keywords)
-    if filters['keyword']:
-        keywords = [kw.strip().lower() for kw in filters['keyword'].split(',') if kw.strip()]
+    keyword_filter = filters.get('keyword', '')
+    if keyword_filter:
+        keywords = [kw.strip().lower() for kw in keyword_filter.split(',') if kw.strip()]
         filtered = [
             c for c in filtered
             if any(
@@ -235,8 +251,9 @@ def filter_contracts(contracts, filters):
                 keyword in c.get('objectoContrato', '').lower() or
                keyword in c.get('descContrato', '').lower() or
                 keyword in ' '.join(str(x) for x in (c.get('cpv', []) if isinstance(c.get('cpv'), list) else [])).lower() or
-                # Announcement fields
+                # Announcement fields - search in description (title/description)
                 keyword in c.get('descricaoAnuncio', '').lower() or
+                keyword in c.get('modeloAnuncio', '').lower() or
                 keyword in ' '.join(str(x) for x in (c.get('CPVs', []) if isinstance(c.get('CPVs'), list) else [])).lower()
                 for keyword in keywords
             )
@@ -605,16 +622,14 @@ def main():
     # CPV filter
     st.sidebar.subheader("CPV Classification")
     cpv_options = get_cpv_display_options()
-    default_cpvs = loaded.get('cpv_codes', []) if loaded else []
+    default_cpvs = normalize_cpv_codes(loaded.get('cpv_codes', [])) if loaded else []
+    if loaded and loaded.get('cpv_codes') != default_cpvs:
+        loaded['cpv_codes'] = default_cpvs
     # Map saved codes to display strings used by the multiselect; skip if not present
-    try:
-        default_cpvs_display = [
-            f"{code} - {CPV_CODES.get(code, 'Unknown')}"
-            for code in default_cpvs
-            if f"{code} - {CPV_CODES.get(code, 'Unknown')}" in cpv_options
-        ]
-    except Exception:
-        default_cpvs_display = []
+    default_cpvs_display = [
+        option for option in cpv_options
+        if option.split(' - ')[0] in default_cpvs
+    ]
     selected_cpvs = st.sidebar.multiselect(
         "Select CPV Categories:",
         options=cpv_options,
@@ -641,27 +656,51 @@ def main():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("🔄 Update Search", use_container_width=True, help="Update the loaded search with current filters"):
-                    # Collect current filters
-                    current_filters = {
-                        'search_type': st.session_state.search_type,
-                        'date_option': date_option,
-                        'start_date': start_date.isoformat() if date_option == "Custom range" else None,
-                        'end_date': end_date.isoformat() if date_option == "Custom range" else None,
-                        'keyword': keyword,
-                        'fornecedor_nif': fornecedor_nif,
-                        'location': location,
-                        'cpv_codes': selected_cpvs
-                    }
-                    
-                    if st.session_state.client.save_search(st.session_state.current_search_name, current_filters):
-                        # Reload the updated filters to refresh the UI
-                        updated_filters = st.session_state.client.load_search(st.session_state.current_search_name)
-                        if updated_filters:
-                            st.session_state.loaded_filters = updated_filters
-                        st.success(f"✅ Updated: {st.session_state.current_search_name}")
-                        st.rerun()
+                    search_name = st.session_state.current_search_name
+                    if not search_name:
+                        st.error("❌ No search loaded to update")
                     else:
-                        st.error(f"❌ Failed to update")
+                        # Collect current filters
+                        current_filters = {
+                            'search_type': st.session_state.search_type,
+                            'date_option': date_option,
+                            'start_date': start_date.isoformat() if date_option == "Custom range" else None,
+                            'end_date': end_date.isoformat() if date_option == "Custom range" else None,
+                            'keyword': keyword,
+                            'fornecedor_nif': fornecedor_nif,
+                            'location': location,
+                            'cpv_codes': cpv_codes
+                        }
+                        
+                        # Debug: Check if search exists
+                        all_searches = st.session_state.client.get_saved_searches()
+                        search_exists = any(s['name'] == search_name for s in all_searches)
+                        
+                        try:
+                            # Always use save_search since it now uses INSERT OR REPLACE
+                            # This is more reliable than update_search
+                            success = st.session_state.client.save_search(search_name, current_filters)
+                            
+                            if success:
+                                # Reload the updated filters to refresh the UI
+                                updated_filters = st.session_state.client.load_search(search_name)
+                                if updated_filters:
+                                    st.session_state.loaded_filters = updated_filters
+                                st.success(f"✅ Updated: {search_name}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed to update saved search '{search_name}'.")
+                                with st.expander("Debug info"):
+                                    st.write(f"Search exists in DB: {search_exists}")
+                                    st.write(f"Search name: '{search_name}'")
+                                    st.write(f"All searches: {[s['name'] for s in all_searches]}")
+                                    st.write(f"Filters: {current_filters}")
+                        except Exception as e:
+                            import traceback
+                            error_details = traceback.format_exc()
+                            st.error(f"❌ Error updating search: {str(e)}")
+                            with st.expander("Error details"):
+                                st.code(error_details)
             with col2:
                 if st.button("❌ Clear", use_container_width=True, help="Clear loaded search"):
                     st.session_state.current_search_name = None
@@ -723,19 +762,22 @@ def main():
                 'keyword': keyword,
                 'fornecedor_nif': fornecedor_nif,
                 'location': location,
-                'cpv_codes': selected_cpvs
+                'cpv_codes': cpv_codes
             }
             
-            if st.session_state.client.save_search(search_name, current_filters):
-                st.session_state.current_search_name = search_name
-                # Load the saved filters to keep them active
-                saved_filters = st.session_state.client.load_search(search_name)
-                if saved_filters:
-                    st.session_state.loaded_filters = saved_filters
-                st.success(f"✅ Saved: {search_name}")
-                st.rerun()
-            else:
-                st.error(f"❌ Name '{search_name}' already exists")
+            try:
+                if st.session_state.client.save_search(search_name, current_filters):
+                    st.session_state.current_search_name = search_name
+                    # Load the saved filters to keep them active
+                    saved_filters = st.session_state.client.load_search(search_name)
+                    if saved_filters:
+                        st.session_state.loaded_filters = saved_filters
+                    st.success(f"✅ Saved: {search_name}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ Failed to save search '{search_name}'. Please check the console for errors.")
+            except Exception as e:
+                st.error(f"❌ Error saving search: {str(e)}")
     
     st.sidebar.markdown("---")
     
