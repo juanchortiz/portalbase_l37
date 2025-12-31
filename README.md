@@ -18,6 +18,12 @@ A Python client and web application for accessing and analyzing Portuguese publi
 - 📥 CSV export functionality
 - ⚡ Real-time search with cached data
 
+### HubSpot Integration
+- 🔄 Automatic deal creation from announcements
+- 🏢 Company matching/creation by NIF
+- 📊 Entity enrichment with contract statistics
+- ⏰ Daily automation via GitHub Actions
+
 ## 🚀 Quick Start
 
 ### 1. Clone the Repository
@@ -105,23 +111,25 @@ announcements = client.get_announcements_by_date("31/10/2025")
 ## 🗄️ Project Structure
 
 ```
-portal-base-client/
+portal-base/
 ├── app.py                      # Streamlit web application
 ├── base_api_client.py          # Direct API client
 ├── cached_api_client.py        # Cached API client with SQLite
+├── hubspot_automation.py       # HubSpot integration module
+├── daily_automation.py         # Daily sync automation script
+├── filter_utils.py             # Filtering utilities
 ├── config.py                   # Configuration management
+├── Biogerm_search.json         # Saved search configuration
 ├── requirements.txt            # Python dependencies
-├── .gitignore                 # Git ignore file
-├── README.md                  # This file
 │
-├── Scripts/
-│   ├── get_yesterday_cached.py # Get yesterday's data
-│   ├── get_date.py            # Get specific date data
-│   ├── sync_year_data.py      # Manual cache sync
-│   ├── cached_examples.py     # Usage examples
-│   └── example_usage.py       # Basic examples
+├── .github/workflows/
+│   └── daily-sync.yml          # GitHub Actions daily automation
 │
-└── APP_GUIDE.md               # Detailed app documentation
+├── Documentation/
+│   ├── README.md               # This file
+│   ├── APP_GUIDE.md            # Web app user guide
+│   ├── HUBSPOT_INTEGRATION.md  # HubSpot integration docs
+│   └── AUTOMATION_SETUP.md     # Automation setup guide
 ```
 
 ## 🔧 Configuration
@@ -131,6 +139,8 @@ portal-base-client/
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `BASE_API_KEY` | Your Base.gov.pt API access token | Yes |
+| `HUBSPOT_API_TOKEN` | HubSpot private app token | For HubSpot integration |
+| `AUTOMATION_SAVED_SEARCH` | Name of saved search for automation | For daily sync |
 
 ### Cache Configuration
 
@@ -240,12 +250,13 @@ For issues, questions, or contributions:
 
 ## 🗺️ Roadmap
 
+- [x] HubSpot integration with deal creation
+- [x] Company matching by NIF
+- [x] Daily automation via GitHub Actions
 - [ ] Add more visualization options
 - [ ] Export to Excel with formatting
 - [ ] Email notifications for new contracts
 - [ ] Advanced analytics (trends, patterns)
-- [ ] API rate limiting handling
-- [ ] Multi-year comparison views
 
 ---
 

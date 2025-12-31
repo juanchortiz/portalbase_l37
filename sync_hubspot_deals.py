@@ -54,7 +54,26 @@ def convert_csv_row_to_announcement(row: dict) -> dict:
 
 
 def main():
-    csv_path = "/Users/juanortiz/Downloads/announcements_20251231_130714.csv"
+    """
+    Sync deals from CSV export to HubSpot.
+    
+    Usage:
+        python sync_hubspot_deals.py [csv_path]
+        
+    If csv_path not provided, uses default path.
+    """
+    import os
+    
+    # Get CSV path from command line or use default
+    if len(sys.argv) > 1:
+        csv_path = sys.argv[1]
+    else:
+        csv_path = os.path.join(os.path.dirname(__file__), "announcements_export.csv")
+    
+    if not os.path.exists(csv_path):
+        print(f"❌ CSV file not found: {csv_path}")
+        print("Usage: python sync_hubspot_deals.py [path_to_csv]")
+        sys.exit(1)
     
     print("=" * 80)
     print("🔄 HubSpot Deal Sync from CSV")
