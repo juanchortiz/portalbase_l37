@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from cached_api_client import CachedBaseAPIClient
 from config import get_api_key, get_github_token, get_github_repo
+from hubspot_automation import create_deal_from_announcement, get_hubspot_token
 import json
 import os
 import io
@@ -465,6 +466,7 @@ def announcements_to_dataframe(announcements):
         cpvs = cpvs if isinstance(cpvs, list) else [str(cpvs)]
         
         data.append({
+            'Select': False,
             'View': announcement_url,
             'Docs': docs_url,
             'N° Anúncio': announcement_id,
@@ -1093,12 +1095,17 @@ def main():
                         # Convert to DataFrame and display
                         df_announcements = announcements_to_dataframe(announcements)
                         
-                        # Display the table with clickable links
-                        st.dataframe(
+                        # Display the table with interactive checkboxes
+                        edited_df = st.data_editor(
                             df_announcements,
                             use_container_width=True,
                             height=600,
                             column_config={
+                                "Select": st.column_config.CheckboxColumn(
+                                    "Select",
+                                    help="Select announcements to push to HubSpot",
+                                    default=False
+                                ),
                                 "View": st.column_config.LinkColumn(
                                     "🔗 Ver",
                                     help="Click to view announcement on Base.gov.pt",
@@ -1115,7 +1122,63 @@ def main():
                                 )
                             },
                             hide_index=True,
+                            disabled=["View", "Docs", "N° Anúncio", "Data Publicação", "Prazo", "Descrição", "Tipo Procedimento", "Preço Base (€)", "CPV", "Entidade"],
                         )
+                        
+                        # Push to HubSpot button
+                        try:
+                            hubspot_token = get_hubspot_token()
+                            has_hubspot_token = True
+                        except (ValueError, Exception):
+                            has_hubspot_token = False
+                        
+                        if has_hubspot_token:
+                            # Get selected rows
+                            selected_rows = edited_df[edited_df['Select'] == True]
+                            
+                            if len(selected_rows) > 0:
+                                col1, col2 = st.columns([1, 4])
+                                with col1:
+                                    push_button = st.button(
+                                        f"🚀 Push {len(selected_rows)} Selected to HubSpot",
+                                        type="primary",
+                                        use_container_width=True
+                                    )
+                                
+                                if push_button:
+                                    # Create a mapping from announcement ID to announcement object
+                                    announcement_map = {ann.get('nAnuncio', ''): ann for ann in announcements}
+                                    
+                                    success_count = 0
+                                    error_count = 0
+                                    
+                                    with st.spinner(f"Pushing {len(selected_rows)} announcement(s) to HubSpot..."):
+                                        for idx, row in selected_rows.iterrows():
+                                            announcement_id = row.get('N° Anúncio', '')
+                                            announcement = announcement_map.get(announcement_id)
+                                            
+                                            if announcement:
+                                                try:
+                                                    result = create_deal_from_announcement(announcement, hubspot_token)
+                                                    if result and result.get('id'):
+                                                        success_count += 1
+                                                        st.toast(f"✅ Successfully pushed announcement {announcement_id} to HubSpot", icon="✅")
+                                                    else:
+                                                        error_count += 1
+                                                        st.toast(f"❌ Failed to push announcement {announcement_id} to HubSpot", icon="❌")
+                                                except Exception as e:
+                                                    error_count += 1
+                                                    st.toast(f"❌ Error pushing announcement {announcement_id}: {str(e)[:100]}", icon="❌")
+                                    
+                                    # Show summary
+                                    if success_count > 0:
+                                        st.success(f"✅ Successfully pushed {success_count} announcement(s) to HubSpot")
+                                    if error_count > 0:
+                                        st.error(f"❌ Failed to push {error_count} announcement(s) to HubSpot")
+                            else:
+                                st.info("👆 Select one or more announcements using the checkboxes to push to HubSpot")
+                        else:
+                            st.info("ℹ️ HubSpot integration not configured. Set HUBSPOT_API_TOKEN to enable push functionality.")
                         
                         # Download button
                         csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
@@ -1351,12 +1414,17 @@ def main():
                 # Convert to DataFrame and display
                 df_announcements = announcements_to_dataframe(announcements)
                 
-                # Display the table with clickable links
-                st.dataframe(
+                # Display the table with interactive checkboxes
+                edited_df = st.data_editor(
                     df_announcements,
                     use_container_width=True,
                     height=600,
                     column_config={
+                        "Select": st.column_config.CheckboxColumn(
+                            "Select",
+                            help="Select announcements to push to HubSpot",
+                            default=False
+                        ),
                         "View": st.column_config.LinkColumn(
                             "🔗 Ver",
                             help="Click to view announcement on Base.gov.pt",
@@ -1373,7 +1441,63 @@ def main():
                         )
                     },
                     hide_index=True,
+                    disabled=["View", "Docs", "N° Anúncio", "Data Publicação", "Prazo", "Descrição", "Tipo Procedimento", "Preço Base (€)", "CPV", "Entidade"],
                 )
+                
+                # Push to HubSpot button
+                try:
+                    hubspot_token = get_hubspot_token()
+                    has_hubspot_token = True
+                except (ValueError, Exception):
+                    has_hubspot_token = False
+                
+                if has_hubspot_token:
+                    # Get selected rows
+                    selected_rows = edited_df[edited_df['Select'] == True]
+                    
+                    if len(selected_rows) > 0:
+                        col1, col2 = st.columns([1, 4])
+                        with col1:
+                            push_button = st.button(
+                                f"🚀 Push {len(selected_rows)} Selected to HubSpot",
+                                type="primary",
+                                use_container_width=True
+                            )
+                        
+                        if push_button:
+                            # Create a mapping from announcement ID to announcement object
+                            announcement_map = {ann.get('nAnuncio', ''): ann for ann in announcements}
+                            
+                            success_count = 0
+                            error_count = 0
+                            
+                            with st.spinner(f"Pushing {len(selected_rows)} announcement(s) to HubSpot..."):
+                                for idx, row in selected_rows.iterrows():
+                                    announcement_id = row.get('N° Anúncio', '')
+                                    announcement = announcement_map.get(announcement_id)
+                                    
+                                    if announcement:
+                                        try:
+                                            result = create_deal_from_announcement(announcement, hubspot_token)
+                                            if result and result.get('id'):
+                                                success_count += 1
+                                                st.toast(f"✅ Successfully pushed announcement {announcement_id} to HubSpot", icon="✅")
+                                            else:
+                                                error_count += 1
+                                                st.toast(f"❌ Failed to push announcement {announcement_id} to HubSpot", icon="❌")
+                                        except Exception as e:
+                                            error_count += 1
+                                            st.toast(f"❌ Error pushing announcement {announcement_id}: {str(e)[:100]}", icon="❌")
+                            
+                            # Show summary
+                            if success_count > 0:
+                                st.success(f"✅ Successfully pushed {success_count} announcement(s) to HubSpot")
+                            if error_count > 0:
+                                st.error(f"❌ Failed to push {error_count} announcement(s) to HubSpot")
+                    else:
+                        st.info("👆 Select one or more announcements using the checkboxes to push to HubSpot")
+                else:
+                    st.info("ℹ️ HubSpot integration not configured. Set HUBSPOT_API_TOKEN to enable push functionality.")
                 
                 # Download button
                 csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
