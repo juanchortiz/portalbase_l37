@@ -8,8 +8,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from cached_api_client import CachedBaseAPIClient
-from config import get_api_key, get_github_token, get_github_repo
-from hubspot_automation import create_deal_from_announcement, get_hubspot_token
+from config import get_api_key, get_github_token, get_github_repo, get_hubspot_token
+from hubspot_automation import create_deal_from_announcement
 import json
 import os
 import io
@@ -1178,7 +1178,7 @@ def main():
                             else:
                                 st.info("👆 Select one or more announcements using the checkboxes to push to HubSpot")
                         else:
-                            st.info("ℹ️ HubSpot integration not configured. Set HUBSPOT_API_TOKEN to enable push functionality.")
+                            st.info("ℹ️ HubSpot integration not configured. Configure HUBSPOT_API_TOKEN in Streamlit secrets, environment variable, or Secrets file to enable push functionality.")
                         
                         # Download button
                         csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
@@ -1497,7 +1497,7 @@ def main():
                     else:
                         st.info("👆 Select one or more announcements using the checkboxes to push to HubSpot")
                 else:
-                    st.info("ℹ️ HubSpot integration not configured. Set HUBSPOT_API_TOKEN to enable push functionality.")
+                    st.info("ℹ️ HubSpot integration not configured. Configure HUBSPOT_API_TOKEN in Streamlit secrets, environment variable, or Secrets file to enable push functionality.")
                 
                 # Download button
                 csv_announcements = df_announcements.to_csv(index=False).encode('utf-8')
